@@ -4,7 +4,7 @@ import * as P from './protocol.js';
 import * as Song from './song.js';
 import { FemaleBrain, personality } from './female.js';
 import { MaleCircuit, NODES, EDGES } from './male.js';
-import { NoteDecoder, synthesize, frameSeconds } from './modem.js';
+import * as Sung from './flysong.js';
 import * as F from './flycode.js';
 import * as Link from './link.js';
 import { FlyEye } from './eye.js';
@@ -73,17 +73,28 @@ function play(x, onTime) {
     requestAnimationFrame(tick);
   });
 }
-const playFrame = (bytes, onTime) => play(synthesize(bytes, 0, 'quick', { fs: FS, version: P.VERSION, amp: 0.6 }), onTime);
+/** sing a turn: the bytes as fly song (js/flysong.js). The trace and the logo follow it. */
+function playFrame(bytes, onTime) {
+  const song = Sung.compose(bytes); oscSet(Sung.render(song, 4000, 1), 4000); let pi = 0;
+  let last = 0;
+  return play(Sung.render(song, FS), (t) => { scene.songT = t; let pulse = false; while (pi < song.pulses.length && song.pulses[pi].t <= t) { pi++; pulse = true; ring(); }
+    if (role === 'male') { const hum = song.hums.some(h => t >= h.t0 && t < h.t1); circuit.step(Math.max(0.001, t - last), { sees: scene.sees, tastes: scene.tastes, singing: true, pulse, hum }); scene.wing = circuit.a.wing; drawMale(); }
+    else scene.wing = pulse ? 1 : scene.wing * 0.85;
+    last = t; if (onTime) onTime(t, song.end); }).then(() => { scene.songT = -1; scene.wing = 0; });
+}
+const songSeconds = (n) => Sung.seconds(n);
 
-/** wait for a modem frame that `accept(bytes)` recognises (returns non-null) */
+/** listen for a sung turn that `accept(bytes)` recognises (returns non-null). Hearing a song begin extends the wait. */
 function waitFrame(accept, ms, onEvent) {
   return new Promise((res) => {
-    const dec = new NoteDecoder({ sampleRate: ctx.sampleRate, onEvent: (e) => {
+    let t = setTimeout(() => done(null), ms);
+    const dec = new Sung.FlySongDecoder({ sampleRate: ctx.sampleRate, onEvent: (e) => {
+      if (e.kind === 'pulse') { scene.pulseFlash = performance.now(); ring(); }
+      if (e.kind === 'header') { clearTimeout(t); t = setTimeout(() => done(null), (e.seconds + 4) * 1000); }
       if (onEvent) onEvent(e);
-      if (e.kind === 'frame' && e.ok && e.version === P.VERSION) { const v = accept(e.bytes); if (v) done(v); }
+      if (e.kind === 'frame' && e.ok) { const v = accept(e.bytes); if (v) done(v); }
     } });
     const l = (x) => dec.push(x); listeners.add(l);
-    const t = setTimeout(() => done(null), ms);
     function done(v) { clearTimeout(t); listeners.delete(l); res(v); }
   });
 }
@@ -109,35 +120,38 @@ async function maleFlow(pass, giftText, r) {
   scene.sees = 1; caption('He sees her, and turns toward her.'); todo('Got her. Now set your phone down a foot from hers, speaker facing hers, and stay quiet.'); await sleep(2500);
   let him; try { him = C.respond(pass, seen.sid, seen.Ya); } catch (e) { caption('That was not a fly.'); return; }
   const keys = him.keys, sy = Song.symbolsOf(keys.tagM), sch = Song.schedule(sy, M);
+  const offerP = window.RTCPeerConnection ? Link.offer().catch(() => null) : Promise.resolve(null);
   // he can build her exactly (the seed comes from the key) and compose the song she was made to want
   const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
   const snaps = []; const L = new Song.Listener(brain, sy, M); L.onFrame = (st, b) => snaps.push({ st, r: snapR(b) }); L.advance(sy, true);
   let verdict = null;
   for (let tries = 0; tries < 3 && !verdict && alive(r); tries++) {
-    stage('tap'); caption('He taps her with a foreleg.'); scene.tastes = 1; air(tries ? `tapping again (${tries + 1})…` : 'tapping (modem, 2.3 s)…');
-    await playFrame(P.tap(seen.sid, him.Yb)); scene.tastes = 0.3; await sleep(500);
+    stage('tap'); caption('He taps her with a foreleg.'); todo('Your phone is singing his tap. Phones a foot apart, speakers facing; stay quiet.'); scene.tastes = 1; air(tries ? `tapping again (${tries + 1})…` : `tapping (song, ${songSeconds(37).toFixed(0)} s)…`);
+    await playFrame(P.tap(seen.sid, him.Yb)); scene.tastes = 0.3; await sleep(1200);   // she needs a moment to build her brain
     stage('sing'); caption('He extends one wing and sings: sine song, then pulse song. The song is his key, proven.'); todo('Your phone is singing. Keep quiet and keep it still.');
     air('singing (3.7 s)…'); resetNotes(); oscSet(Song.renderTrue(sch, M, 4000), 4000);
     let shown = -1;
     await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005));
       while (shown < k) { shown++; showFemale(snaps[shown].st, snaps[shown].r, true, shown < k); } });
     scene.songT = -1; stage('decide'); caption('She decides.'); air('waiting for her…'); todo('Wait: her phone answers in a moment.');
-    verdict = await waitFrame((b) => P.parseVerdict(b, seen.sid, keys), 9000);
+    verdict = await waitFrame((b) => P.parseVerdict(b, seen.sid, keys), 12000);
   }
   if (!alive(r)) return;
   if (verdict === 'wrongkind') { stage('decide', true); caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); air(''); todo('The passphrases don\'t match. Check you both typed exactly the same, then tap Start over on both phones.', true); return; }
   if (verdict !== 'accept') { stage('decide', true); scene.kick = performance.now(); caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.'); air('');
     todo(verdict === 'kick' ? 'She rejected the song: usually a different passphrase, or too much noise. Check the passphrase, then Start over on both phones (she may need a few seconds to calm down).' : 'Nothing heard from her. Move the phones closer, volume up, quieter room, then Start over on both.', true); return; }
-  stage('mate'); caption('She slows and opens, and she tastes right. They mate.'); todo('She accepted. Keep the phones close and quiet a few seconds more while the private chat opens.');
+  stage('mate'); caption('She slows and opens, and she tastes right. They mate.'); todo('She accepted. Keep the phones close and quiet: they sing to each other for about 40 s more while the private chat opens.');
   // copulation: open a direct link for files and photos; its keys travel sealed, by sound
   let link = null;
   if (window.RTCPeerConnection) {
     try {
-      air('opening the nest…'); const o = await Link.offer();
+      air('opening the nest…'); const o = await offerP; if (!o) throw new Error('no WebRTC');
       for (let tries = 0; tries < 3 && !link && alive(r); tries++) {
-        air(tries ? `opening the nest (${tries + 1})…` : 'opening the nest (modem)…'); scene.mating = 0.2 + 0.2 * tries;
-        await playFrame(P.seal(P.T.OFFER, seen.sid, keys, o.blob));
-        const ansB = await waitFrame((b) => P.unseal(P.T.ANSWER, b, seen.sid, keys), 10000);
+        const msg = P.sealFixed(P.T.OFFER, seen.sid, keys, o.blob);
+        air(tries ? `opening the nest (${tries + 1})…` : `he sings the way to their nest (${songSeconds(msg.length).toFixed(0)} s)…`); scene.mating = 0.2 + 0.2 * tries;
+        await playFrame(msg, (t, end) => air(`he sings the way to their nest ${Math.round(100 * t / end)}%`));
+        air('listening for her answer…');
+        const ansB = await waitFrame((b) => P.unsealFixed(P.T.ANSWER, b, seen.sid, keys), 30000, (e) => { if (e.kind === 'progress') air(`she answers ${Math.round(100 * e.frac)}%`); });
         if (ansB) { await Link.complete(o.pc, ansB); air('connecting…'); if (await Link.open(o.dc)) link = o; }
       }
     } catch (e) { console.warn(e); }
@@ -147,8 +161,8 @@ async function maleFlow(pass, giftText, r) {
   if (link) { openNest(link.dc, giftText); caption('Mated. The nest is open: send her photos and files.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
   // no direct link: the note goes by sound
   if (giftText) {
-    const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
-    await playFrame(g, (t) => air(`passing the note by sound ${Math.round(100 * Math.min(1, t / dur))}%`));
+    const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText });
+    await playFrame(g, (t, end) => air(`singing the note ${Math.round(100 * Math.min(1, t / end))}%`));
   }
   resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones (are they on networks that can reach each other?).' + (giftText ? ' Your note went by sound.' : '')); if (giftText) addItem({ dir: 'out', kind: 'note', text: giftText }); nestStatus('by sound only', false);
   caption('Mated, but the nest would not open.'); air('mated'); todo('The phones couldn\'t link directly (often different or strict networks). Try both on the same Wi-Fi and Start over.', true);
@@ -218,14 +232,14 @@ async function femaleFlow(pass, r) {
     if (!alive(r)) return;
     const accepted = result === 'accept';
     stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : 'Wrong notes. She kicks and runs.');
-    if (!accepted) { scene.kick = performance.now(); memory.rejected(); todo('His song was wrong: usually a different passphrase. Check you both typed the same, then try again; she waits a little longer after each rejection.', true); air('she kicks (modem)…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
+    if (!accepted) { scene.kick = performance.now(); memory.rejected(); todo('His song was wrong: usually a different passphrase. Check you both typed the same, then try again; she waits a little longer after each rejection.', true); air('she kicks…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
     // copulation: he opens a direct link (or, failing that, passes a note by sound)
     let got = null;
     for (let tries = 0; tries < 4 && !got && alive(r); tries++) {
-      air('she accepts (modem)…'); await playFrame(P.accept(her.sid, keys));
-      stage('mate'); caption('They mate.'); air('waiting for him…'); todo('You accepted him. Keep the phones close a few seconds more while the private chat opens.');
-      got = await waitFrame((b) => { const o = P.unseal(P.T.OFFER, b, her.sid, keys); if (o) return { offer: o }; const g = P.parseGift(b, her.sid, keys); return g ? { gift: g } : null; }, 14000,
-        (e) => { if (e.kind === 'progress') scene.mating = e.frac; });
+      air(`she accepts (song, ${songSeconds(21).toFixed(0)} s)…`); await playFrame(P.accept(her.sid, keys));
+      stage('mate'); caption('They mate.'); air('waiting for him…'); todo('You accepted him. Keep the phones close and quiet: they sing to each other for about 40 s more while the private chat opens.');
+      got = await waitFrame((b) => { const o = P.unsealFixed(P.T.OFFER, b, her.sid, keys); if (o) return { offer: o }; const g = P.parseGift(b, her.sid, keys); return g ? { gift: g } : null; }, 16000,
+        (e) => { if (e.kind === 'progress') { scene.mating = e.frac * 0.5; air(`he sings the way to your nest ${Math.round(100 * e.frac)}%`); } });
     }
     if (!alive(r)) return;
     if (!got) { caption('He went quiet.'); todo('His phone went quiet. Keep the phones close; if nothing happens, Start over on both.', true); continue; }
@@ -234,7 +248,7 @@ async function femaleFlow(pass, r) {
     let link = null;
     try { link = await Link.answer(got.offer); } catch (e) { console.warn(e); }
     if (link) {
-      air('opening the nest (modem)…'); await playFrame(P.seal(P.T.ANSWER, her.sid, keys, link.blob)); air('connecting…');
+      await playFrame(P.sealFixed(P.T.ANSWER, her.sid, keys, link.blob), (t, end) => { scene.mating = 0.5 + 0.5 * t / end; air(`she answers ${Math.round(100 * t / end)}%`); }); air('connecting…');
       const dc = await Promise.race([link.dc, sleep(20000).then(() => null)]);
       if (dc && await Link.open(dc)) { scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
     }
@@ -445,8 +459,9 @@ function drawFlies() {
   if (st === 'sing') mx = W * 0.38;
   if (st === 'decide') { mx = W * 0.38; if (scene.bad) { const k = (now - scene.kick) / 1000; ovi = Math.min(1, k * 3); fxo = W * 0.25 * ease(k / 1.2); mx = W * 0.38 - W * 0.12 * ease(k / 1.5); } }
   if (st === 'mate') { mx = W * 0.38 + (fx - W * 0.38 - 18) * ease(dt / 1.5); my = fy - 6 * ease(dt / 1.5); }
-  fly(g, fx + fxo, fy, Math.PI, 2.0, { female: true, ovi, wing: 0 });
-  const singing = st === 'sing' ? Math.max(0.6, scene.wing) : 0;
+  fly(g, fx + fxo, fy, Math.PI, 2.0, { female: true, ovi, wing: role === 'female' && scene.songT >= 0 ? 0.35 * scene.wing : 0 });
+  const hisSong = role === 'male' && scene.songT >= 0, herSong = role === 'female' && scene.songT >= 0;
+  const singing = st === 'sing' || hisSong ? Math.max(0.6, scene.wing) : 0;
   fly(g, mx, my, ma, 1.8, { wing: singing, legReach });
   // pulse flashes on her side while she hears song
   if (now - scene.pulseFlash < 80) { g.strokeStyle = 'rgba(255,104,186,.7)'; g.beginPath(); g.arc(fx + 30, fy, 60, 0, 7); g.stroke(); }

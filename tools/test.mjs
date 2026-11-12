@@ -50,14 +50,16 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   const bad = P.gift(l1.sid, mk, { kind: 'text', text: 'x' }); bad[40] ^= 1; ok(P.parseGift(bad, her.sid, hk) === null, 'a tampered gift is refused');
   { const o = P.seal(P.T.OFFER, l1.sid, mk, Uint8Array.of(1, 2, 3)); const back = P.unseal(P.T.OFFER, o, her.sid, hk);
     ok(back && back.length === 3 && back[2] === 3, 'the sealed WebRTC offer opens for her'); o[33] ^= 1; ok(P.unseal(P.T.OFFER, o, her.sid, hk) === null, '…and not if tampered with');
-    const x = Mo.synthesize(P.seal(P.T.OFFER, l1.sid, mk, new Uint8Array(90)), 0, 'quick', { fs: 48000, version: P.VERSION }); console.log(`     a sealed 90-byte offer takes ${(x.length / 48000).toFixed(1)} s by sound`); }
+  }
   const stranger = C.respond('pickled hering', l1.sid, l1.Ya), sk = her.finish(stranger.Yb);
   ok(P.parseVerdict(P.accept(her.sid, sk), l1.sid, stranger.keys) === 'wrongkind', 'with another passphrase her pheromone tastes wrong');
   const c1 = { sid: l1.sid };
-  for (const [name, bytes] of [['tap', b2], ['accept', P.accept(her.sid, hk)]]) {
-    const x = Mo.synthesize(bytes, 0, 'quick', { fs: 48000, version: P.VERSION }), ev = Mo.decodeBuffer(x, 48000);
-    ok(ev.length === 1 && ev[0].ok && ev[0].version === P.VERSION && C.tagsEqual(ev[0].bytes, bytes), `${name} through the modem (${Mo.frameSeconds(bytes.length, 'quick').toFixed(1)} s)`);
+  const Sung = await import('../js/flysong.js');
+  for (const [name, bytes] of [['tap', b2], ['accept', P.accept(her.sid, hk)], ['kick', P.kick(her.sid)], ['link offer', P.sealFixed(P.T.OFFER, l1.sid, mk, new Uint8Array(82))]]) {
+    const song = Sung.compose(bytes), ev = Sung.decodeAll(Sung.render(song, 48000), 48000);
+    ok(ev.length === 1 && ev[0].ok && C.tagsEqual(ev[0].bytes, bytes), `${name} sung as fly song (${bytes.length} bytes, ${song.end.toFixed(1)} s)`);
   }
+  { const b = P.sealFixed(P.T.ANSWER, l1.sid, mk, Uint8Array.of(9, 9)); ok(P.unsealFixed(P.T.ANSWER, b, her.sid, hk)?.[1] === 9, 'the sealed link answer opens for him'); b[7] ^= 1; ok(P.unsealFixed(P.T.ANSWER, b, her.sid, hk) === null, '…and not if tampered with'); }
   const mem = new P.Memory({ d: {}, get(k) { return this.d[k]; }, set(k, v) { this.d[k] = v; } });
   mem.rejected(0); mem.rejected(0); ok(mem.refractory(0) === 20000, 'conditioning doubles: 10 s, then 20 s');
   mem.mated(c1.sid); ok(mem.seen(c1.sid) && mem.refractory(0) === 0, 'a mated session is remembered and refused again');

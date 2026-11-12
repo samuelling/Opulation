@@ -1,17 +1,17 @@
 // The ritual as a protocol. Pure logic: no audio, no DOM, so it runs in Node tests too.
 //
 //   LOOK    her face      (her screen → his camera)  v(1) | sid(8) | Ya(32)        he sees her: orient
-//   TAP     he → her      (modem)   1 | sid4 | Yb(32)                            he taps her
+//   TAP     he → her      (song)     1 | sid4 | Yb(32)                            he taps her
 //   SONG    he → her      (song)    tagM as 64 inter-pulse intervals             her brain decides
-//   ACCEPT  her → him     (modem)   4 | sid4 | tagF(16)                          she slows and opens; tagF is her
+//   ACCEPT  her → him     (song)     4 | sid4 | tagF(16)                          she slows and opens; tagF is her
 //                                                                                 pheromone: proof she is his kind
-//   KICK    her → him     (modem)   6 | sid4                                     she kicks; she won't listen for a while
-//   OFFER   he → her      (modem)   7 | sid4 | nonce(24) | sealed WebRTC offer    copulation: a direct link opens
-//   ANSWER  her → him     (modem)   8 | sid4 | nonce(24) | sealed WebRTC answer   (js/link.js), for files and photos
-//   GIFT    he → her      (modem)   5 | sid4 | nonce(24) | sealed note            a note by sound, if no link opens
+//   KICK    her → him     (song)     6 | sid4                                     she kicks; she won't listen for a while
+//   OFFER   he → her      (song)    7 | sid4 | sealed WebRTC offer               copulation: a direct link opens
+//   ANSWER  her → him     (song)    8 | sid4 | sealed WebRTC answer              (js/link.js), for files and photos
+//   GIFT    he → her      (song)     5 | sid4 | nonce(24) | sealed note            a note by sound, if no link opens
 //
-// Modem frames use the Screech modem (frame version 5). The gift is sealed with XChaCha20-Poly1305 under kx,
-// with its 5-byte header as associated data.
+// Every sound turn is sung as fly song (js/flysong.js). The gift and the link messages are sealed with
+// XChaCha20-Poly1305 under kx, with their 5-byte header as associated data.
 import * as C from './cpace.js';
 
 export const VERSION = 5, LOOK_VERSION = 1;
@@ -70,4 +70,15 @@ export function seal(t, sid, keys, bytes) {
 export function unseal(t, b, sid, keys) {
   if (b.length < 5 + 24 + 16 || b[0] !== t || !sid4eq(b, sid)) return null;
   try { return C.sodium().crypto_aead_xchacha20poly1305_ietf_decrypt(null, b.subarray(29), b.subarray(0, 5), b.subarray(5, 29), keys.kx); } catch (e) { return null; }
+}
+
+/** sealed with a fixed nonce, to keep the sung message short: used for the one WebRTC offer and the one answer
+ *  of a session (each key kx is used for exactly one message of each type; a resend repeats the same bytes) */
+const fixedNonce = (t) => { const n = new Uint8Array(24); n[0] = t; n.set([0x4f, 0x50, 0x55, 0x4c], 1); return n; };
+export function sealFixed(t, sid, keys, bytes) {
+  const h = head(t, sid); return C.cat(h, C.sodium().crypto_aead_xchacha20poly1305_ietf_encrypt(bytes, h, null, fixedNonce(t), keys.kx));
+}
+export function unsealFixed(t, b, sid, keys) {
+  if (b.length < 5 + 16 || b[0] !== t || !sid4eq(b, sid)) return null;
+  try { return C.sodium().crypto_aead_xchacha20poly1305_ietf_decrypt(null, b.subarray(5), b.subarray(0, 5), fixedNonce(t), keys.kx); } catch (e) { return null; }
 }

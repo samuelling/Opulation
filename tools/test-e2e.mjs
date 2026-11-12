@@ -5,11 +5,11 @@ import * as P from '../js/protocol.js';
 import * as Song from '../js/song.js';
 import * as F from '../js/flycode.js';
 import { FemaleBrain, personality } from '../js/female.js';
-import { synthesize, decodeBuffer } from '../js/modem.js';
+import * as Sung from '../js/flysong.js';
 import { loadBrainParts } from './test-female.mjs';
 const FS = 48000;
 function room(x) { const y = new Float32Array(x.length + FS / 2), d = Math.round(0.006 * FS); for (let i = 0; i < x.length; i++) { y[i + 1000] += 0.7 * x[i]; y[i + 1000 + d] += 0.3 * x[i]; } for (let i = 0; i < y.length; i++) y[i] += 0.01 * (Math.random() * 2 - 1); return y; }
-const over = (bytes) => { const ev = decodeBuffer(room(synthesize(bytes, 0, 'quick', { fs: FS, version: P.VERSION })), FS).filter(e => e.ok); return ev.length ? ev[0].bytes : null; };
+const over = (bytes) => { const ev = Sung.decodeAll(room(Sung.render(Sung.compose(bytes), FS)), FS).filter(e => e.ok); return ev.length ? ev[0].bytes : null; };   // sung, through the room
 export async function ritual(S, parts, herPass, hisPass) {
   const M = parts.M;
   // she shows her face; his camera reads it
@@ -30,6 +30,9 @@ export async function ritual(S, parts, herPass, hisPass) {
   const vb = over(verdict === 'accept' ? P.accept(her.sid, keys) : P.kick(her.sid)); const hv = vb && P.parseVerdict(vb, seen.sid, him.keys);
   if (hv !== 'accept') return `${verdict}/${hv}`;
   const gb = over(P.gift(seen.sid, him.keys, { kind: 'text', text: 'a fig, ripe' })); const g = gb && P.parseGift(gb, her.sid, keys);
+  // the link details, sung both ways (a stand-in blob of the real size)
+  const ob = over(P.sealFixed(P.T.OFFER, seen.sid, him.keys, new Uint8Array(82).fill(7))); const offer = ob && P.unsealFixed(P.T.OFFER, ob, her.sid, keys);
+  if (!offer || offer.length !== 82) return 'offer lost';
   return g ? 'mated: ' + g.text : 'gift lost';
 }
 export async function run(ok, S) {

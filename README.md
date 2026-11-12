@@ -11,7 +11,7 @@ Two phones may only share a secret once they have courted like fruit flies.
 3. The sender picks **♂ Court**, the receiver **♀ Be courted**.
 4. She starts first: her face appears. Brightness up, screen toward his camera.
 5. He starts, allows camera and microphone, and points the camera at her face until it locks.
-6. Both phones down, a foot apart, speakers facing; quiet for about 15 s.
+6. Both phones down, a foot apart, speakers facing; quiet for about a minute while they sing to each other.
 7. If she accepts, a private chat opens on both: notes, photos, files. Leaving the page ends it; nothing is kept.
 
 A **Now** bar at the top of the ritual says what to do with your phone at each moment, and what to check if something fails.
@@ -21,12 +21,16 @@ A **Now** bar at the top of the ritual says what to do with your phone at each m
 | Stage | What the flies do | What the phones do |
 |---|---|---|
 | **Orient** | He sees her. | Her screen shows her face, a fruit fly's head from the front. Her compound eyes carry her half of a CPace key exchange: each of 520 facets is one bit, Reed-Solomon coded, located by four ink dots (cheek bristles, median ocellus, labellum). His camera reads it. |
-| **Tap** | He taps her with a foreleg. | His half of the key exchange, by sound (the [Screech](https://samuelling.github.io/Screech/) modem, 2.3 s). Both phones now hold the same session key, if their passphrases match. |
+| **Tap** | He taps her with a foreleg. | His half of the key exchange, sung (7.7 s). Both phones now hold the same session key, if their passphrases match. |
 | **Sing** | He extends one wing and sings: sine song, then four pulse trains. | His key-confirmation tag (16 bytes) *is* the song: 64 inter-pulse intervals of 30, 36, 42 or 48 ms. Played three octaves up for phone speakers; she decodes the intervals and replays the true-pitch song (270 Hz pulses, 155 Hz hum) into her ears. |
 | **She decides** | She slows and opens, or kicks and runs. | Her ears are FlyHarp's FlyWire auditory network. Every interval that matches the song she expects lets her song pathway's activity raise her receptivity; every wrong note is a kick. More than four wrong notes and she rejects him. Her acceptance carries her own tag (her pheromone), which he checks. |
 | **Mate** | Copulation. | The nest opens: a direct WebRTC link between the phones, for photos, files and notes, both ways, as many as you like. Its connection details (about 90 bytes) go by sound, sealed with the session key, so the link's encryption is bound to the passphrase and nobody can sit in the middle. No server relays anything. If the phones can't reach each other directly (no TURN relay), his first note still goes by sound. |
 
 After a rejection she won't show herself for a while (10 s, doubling up to 10 min): courtship conditioning, and a brake on anyone guessing passphrases.
+
+## Fly song all the way through
+
+Every sound turn is courtship song, never a modem screech (`js/flysong.js`). A turn is a sine-song hum, then pulse trains broken by short hums, as a real male alternates them. Each pulse carries four bits: the interval since the last pulse (25, 30, 35 or 40 ms) and the pulse's carrier (250, 300, 350 or 400 Hz, the spread from Pslow to Pfast pulses). Everything is played three octaves up so phone speakers can carry it. Each turn is framed with a length, CRC-8 and CRC-32, rate-½ convolutionally coded and interleaved. A lost pulse is detected and treated as an erasure, an echo is ignored, and a hum re-anchors the timing. That gives about 60 bits/s: his tap is 7.7 s, her acceptance 5 s, the sealed link details 18 s each way. The key song (the 64 intervals that prove his passphrase) stays strictly *melanogaster*: one carrier, 30–48 ms intervals. Real *melanogaster* females don't sing; here her phone answers in song anyway.
 
 ## Her brain, and his
 
@@ -56,7 +60,8 @@ js/song.js      the song: tag <-> intervals, the ideal antenna frames, her liste
 js/female.js    the FlyWire auditory network in Q16 integers, with a seeded personality
 js/male.js      his schematic courtship circuit
 js/eye.js       his optic lobe (FlyHarp's flyvis model in js/fly/), fed by the camera
-js/modem.js     Screech's modem (copy; accepts frame version 5)
+js/flysong.js   fly song as a data channel: compose, render, streaming decoder
+js/modem.js     Screech's modem (copy): its convolutional code and CRCs are reused by the fly song
 js/app.js       the page
 data/           ear.json + ear.bin (from FlyHarp), female-model.json, vectors.json
 tools/          make-model.mjs, test*.mjs (npm install; npm test)
