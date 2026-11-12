@@ -1,4 +1,4 @@
-// Opulation (web): the courtship handshake, with both flies' nervous systems on screen.
+// OPUlation (web): the courtship handshake, with both flies' nervous systems on screen.
 import * as C from './cpace.js';
 import * as P from './protocol.js';
 import * as Song from './song.js';
