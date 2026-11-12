@@ -161,3 +161,16 @@ canvas { background: #12040c; border: 1px solid var(--line); border-radius: 10px
 footer { color: var(--faint); font: 11.5px var(--mono); text-align: center; padding: 0 20px 34px; max-width: 46em; margin: 0 auto; }
 footer a { color: var(--muted); }
 @media (min-width: 700px) { .logo { font-size: 56px; } #logo { width: 84px; height: 64px; } }
+
+/* ---------- instructions */
+.how { background: rgba(20,4,14,.5); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; }
+.how summary { cursor: pointer; font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .14em; color: var(--rose); }
+.how ol { margin: 10px 0 2px; padding-left: 20px; display: grid; gap: 7px; font-size: 14px; line-height: 1.4; color: #e6d2c8; }
+.how li::marker { color: var(--pink); font-weight: 700; }
+.how b { color: var(--ink); }
+.todo { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--pink);
+  background: linear-gradient(90deg, rgba(255,104,186,.18), rgba(255,104,186,.04)); box-shadow: 0 0 24px -8px rgba(255,104,186,.6); }
+.todo.done { border-color: var(--line2); box-shadow: none; background: rgba(20,4,14,.5); }
+.todoK { flex: none; font: 700 10px var(--sans); text-transform: uppercase; letter-spacing: .14em; color: #2a0614; background: var(--pink); border-radius: 999px; padding: 4px 9px; }
+.todo.done .todoK { background: var(--faint); color: var(--ink); }
+#todoT { font-size: 15px; font-weight: 500; line-height: 1.35; }

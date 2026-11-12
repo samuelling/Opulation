@@ -4,6 +4,18 @@ Two phones may only share a secret once they have courted like fruit flies.
 
 **Play:** https://samuelling.github.io/Opulation/ (GitHub Pages from `main`, root). Use two phones. One chooses *Court* (he sends), the other *Be courted* (she receives), and both type the same passphrase: their species.
 
+## How to court
+
+1. Two phones, one quiet room, volume up. Both open the page.
+2. Agree on a passphrase out loud; both type exactly the same.
+3. The sender picks **♂ Court**, the receiver **♀ Be courted**.
+4. She starts first: her face appears. Brightness up, screen toward his camera.
+5. He starts, allows camera and microphone, and points the camera at her face until it locks.
+6. Both phones down, a foot apart, speakers facing; quiet for about 15 s.
+7. If she accepts, a private chat opens on both: notes, photos, files. Leaving the page ends it; nothing is kept.
+
+A **Now** bar at the top of the ritual says what to do with your phone at each moment, and what to check if something fails.
+
 ## The ritual
 
 | Stage | What the flies do | What the phones do |

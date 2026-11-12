@@ -48,6 +48,18 @@
 
 <main>
   <section id="setup" class="card">
+    <details class="how" open>
+      <summary>How to court, step by step</summary>
+      <ol>
+        <li><b>Two phones, one room.</b> Both open this page. Turn the volume up and the room down: no music, no talking during the songs.</li>
+        <li><b>Agree on a passphrase out loud</b> (any short phrase, e.g. <i>fig wasp</i>). Both phones must type exactly the same thing. It's your species: a phone with a different one gets kicked.</li>
+        <li><b>Pick parts.</b> The one sending is <b>♂ Court</b>; the one receiving is <b>♀ Be courted</b>.</li>
+        <li><b>♀ goes first:</b> tap <i>Wait to be courted</i> and allow the microphone. Her face appears; turn the screen brightness up.</li>
+        <li><b>♂ next:</b> tap <i>Begin courtship</i>, allow the camera and microphone, and point the camera at her face until it locks (a second or two).</li>
+        <li><b>Then set both phones down</b> face up, a foot apart, speakers toward each other, and stay quiet for about 15 seconds while he taps and sings and she listens.</li>
+        <li><b>If she accepts,</b> a private chat opens on both phones: notes, photos, files. When either of you leaves the page, you're finished and nothing is kept.</li>
+      </ol>
+    </details>
     <div class="roles" role="radiogroup" aria-label="Your part in the ritual">
       <button id="roleMale" class="role" role="radio" aria-checked="true">
         <span class="sym">♂</span><span class="rt">Court</span><span class="rs">I'm sending</span>
@@ -56,7 +68,7 @@
         <span class="sym">♀</span><span class="rt">Be courted</span><span class="rs">I'm receiving</span>
       </button>
     </div>
-    <label class="field">Shared passphrase<span class="hint">Your species. Only a mate with the same one will do.</span>
+    <label class="field">Shared passphrase<span class="hint">Agree on it together first; both phones type exactly the same. Short is fine.</span>
       <input id="pass" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. bromeliad at dusk">
     </label>
     <label class="field" id="giftField">A first note <span class="hint">Optional. Sent the moment she accepts; after that you can send files and photos.</span>
@@ -64,10 +76,11 @@
     </label>
     <button id="go" class="go">Begin courtship</button>
     <p id="setupMsg" class="msg" hidden></p>
-    <p class="small">Hold the phones a foot apart, speakers facing, the room quiet. Both listen and both sing, in turns.</p>
+    
   </section>
 
   <section id="ritual" hidden>
+    <div id="todo" class="todo" role="status" aria-live="polite"><span class="todoK">Now</span><span id="todoT"></span></div>
     <ol id="stages" class="stages" aria-label="The ritual">
       <li data-s="orient">Orient</li><li data-s="tap">Tap</li><li data-s="sing">Sing</li><li data-s="decide">She decides</li><li data-s="mate">Mate</li>
     </ol>

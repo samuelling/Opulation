@@ -37,7 +37,7 @@ $('go').onclick = async () => {
   try { localStorage.setItem('opulation.pass', pass); } catch (e) {}
   $('go').disabled = true;
   try { await boot; await startAudio(); } catch (e) { $('go').disabled = false; return showSetupMsg(e.message); }
-  $('setup').hidden = true; $('ritual').hidden = false; resetNest();
+  $('setup').hidden = true; $('ritual').hidden = false; resetNest(); window.scrollTo({ top: $('ritual').offsetTop - 8, behavior: 'smooth' });
   run = { id: Math.random() };
   if (role === 'male' && !eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }   // his optic lobe takes ~2 s to wake
   if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
@@ -96,15 +96,17 @@ function stage(s, bad = false) {
   scene.stage = s; scene.bad = bad; scene.t0 = performance.now();
 }
 const caption = (t) => { $('caption').textContent = t; };
+/** the plain instruction: what to do with your phone right now */
+const todo = (t, done = false) => { $('todoT').textContent = t; $('todo').classList.toggle('done', done); };
 const air = (t) => { $('air').textContent = t; };
 
 // ---------------------------------------------------------------- the male
 async function maleFlow(pass, giftText, r) {
   $('brainMale').classList.remove('dim'); $('fTitle').textContent = 'Her, as his phone predicts her';
-  stage('orient'); caption('He looks for her.'); air('');
+  stage('orient'); caption('He looks for her.'); air(''); todo('Point your camera at her screen and fill the frame with her face. Hold still until it locks.');
   const seen = await lookForHer(r);
   if (!alive(r) || !seen) return;
-  scene.sees = 1; caption('He sees her, and turns toward her.'); await sleep(900);
+  scene.sees = 1; caption('He sees her, and turns toward her.'); todo('Got her. Now set your phone down a foot from hers, speaker facing hers, and stay quiet.'); await sleep(2500);
   let him; try { him = C.respond(pass, seen.sid, seen.Ya); } catch (e) { caption('That was not a fly.'); return; }
   const keys = him.keys, sy = Song.symbolsOf(keys.tagM), sch = Song.schedule(sy, M);
   // he can build her exactly (the seed comes from the key) and compose the song she was made to want
@@ -114,18 +116,19 @@ async function maleFlow(pass, giftText, r) {
   for (let tries = 0; tries < 3 && !verdict && alive(r); tries++) {
     stage('tap'); caption('He taps her with a foreleg.'); scene.tastes = 1; air(tries ? `tapping again (${tries + 1})…` : 'tapping (modem, 2.3 s)…');
     await playFrame(P.tap(seen.sid, him.Yb)); scene.tastes = 0.3; await sleep(500);
-    stage('sing'); caption('He extends one wing and sings: sine song, then pulse song. The song is his key, proven.');
+    stage('sing'); caption('He extends one wing and sings: sine song, then pulse song. The song is his key, proven.'); todo('Your phone is singing. Keep quiet and keep it still.');
     air('singing (3.7 s)…'); resetNotes(); oscSet(Song.renderTrue(sch, M, 4000), 4000);
     let shown = -1;
     await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005));
       while (shown < k) { shown++; showFemale(snaps[shown].st, snaps[shown].r, true, shown < k); } });
-    scene.songT = -1; stage('decide'); caption('She decides.'); air('waiting for her…');
+    scene.songT = -1; stage('decide'); caption('She decides.'); air('waiting for her…'); todo('Wait: her phone answers in a moment.');
     verdict = await waitFrame((b) => P.parseVerdict(b, seen.sid, keys), 9000);
   }
   if (!alive(r)) return;
-  if (verdict === 'wrongkind') { stage('decide', true); caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); air(''); return; }
-  if (verdict !== 'accept') { stage('decide', true); scene.kick = performance.now(); caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.'); air(''); return; }
-  stage('mate'); caption('She slows and opens, and she tastes right. They mate.');
+  if (verdict === 'wrongkind') { stage('decide', true); caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); air(''); todo('The passphrases don\'t match. Check you both typed exactly the same, then tap Start over on both phones.', true); return; }
+  if (verdict !== 'accept') { stage('decide', true); scene.kick = performance.now(); caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.'); air('');
+    todo(verdict === 'kick' ? 'She rejected the song: usually a different passphrase, or too much noise. Check the passphrase, then Start over on both phones (she may need a few seconds to calm down).' : 'Nothing heard from her. Move the phones closer, volume up, quieter room, then Start over on both.', true); return; }
+  stage('mate'); caption('She slows and opens, and she tastes right. They mate.'); todo('She accepted. Keep the phones close and quiet a few seconds more while the private chat opens.');
   // copulation: open a direct link for files and photos; its keys travel sealed, by sound
   let link = null;
   if (window.RTCPeerConnection) {
@@ -141,21 +144,21 @@ async function maleFlow(pass, giftText, r) {
   }
   if (!alive(r)) return;
   scene.mating = 1; memory.mated(seen.sid);
-  if (link) { openNest(link.dc, giftText); caption('Mated. The nest is open: send her photos and files.'); air('mated'); return; }
+  if (link) { openNest(link.dc, giftText); caption('Mated. The nest is open: send her photos and files.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
   // no direct link: the note goes by sound
   if (giftText) {
     const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
     await playFrame(g, (t) => air(`passing the note by sound ${Math.round(100 * Math.min(1, t / dur))}%`));
   }
   resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones (are they on networks that can reach each other?).' + (giftText ? ' Your note went by sound.' : '')); if (giftText) addItem({ dir: 'out', kind: 'note', text: giftText }); nestStatus('by sound only', false);
-  caption('Mated, but the nest would not open.'); air('mated');
+  caption('Mated, but the nest would not open.'); air('mated'); todo('The phones couldn\'t link directly (often different or strict networks). Try both on the same Wi-Fi and Start over.', true);
 }
 /** his camera, until he has read her face */
 async function lookForHer(r) {
   $('look').hidden = false; $('face').hidden = true; $('cam').hidden = false; $('lookCap').textContent = 'Point your camera at her face. Her eyes hold her half of the key.';
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
-  catch (e) { $('lookCap').textContent = 'He needs the camera to see her (' + e.message + ').'; return null; }
+  catch (e) { $('lookCap').textContent = 'He needs the camera to see her (' + e.message + ').'; todo('Allow camera access for this page (browser settings), then Start over.', true); return null; }
   const v = $('video'); v.srcObject = stream; await v.play().catch(() => {});
   const view = $('camView'), g = view.getContext('2d'), work = document.createElement('canvas'), wg = work.getContext('2d', { willReadFrequently: true });
   let found = null, best = 0, lcMax = 1e-3, until = Infinity, eyeFirst = 0;
@@ -192,17 +195,17 @@ async function femaleFlow(pass, r) {
   while (alive(r)) {
     stage('orient'); resetNotes(); air('');
     const wait = memory.refractory();
-    if (wait > 0) { $('look').hidden = true; caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); await sleep(1000); continue; }
+    if (wait > 0) { $('look').hidden = true; caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); todo(`Wait ${Math.ceil(wait / 1000)} s. Meanwhile, double-check the passphrase with him.`); await sleep(1000); continue; }
     // a fresh face each time: her half of the key exchange, in her eyes
     const her = new C.Initiator(pass), bits = F.facetBits(P.look(her));
     $('look').hidden = false; $('cam').hidden = true; $('face').hidden = false; F.drawCanvas($('face').getContext('2d'), bits, 1000);
     $('lookCap').textContent = 'Show him your face: hold your screen up to his camera, bright and still.';
-    caption('She waits to be seen.'); air('listening…');
+    caption('She waits to be seen.'); air('listening…'); todo('Turn your brightness up and hold this screen toward his camera. When his phone locks on, set yours down a foot from his, speakers facing.');
     const t = await waitFrame((b) => P.parseTap(b, her.sid), 3600000, (e) => { if (e.kind === 'header') air('he taps her…'); });
     if (!alive(r) || !t) return;
     let keys; try { keys = her.finish(t.Yb); } catch (e) { caption('That was not a fly.'); continue; }
     $('look').hidden = true; scene.sees = 1;
-    stage('tap'); caption('He saw her, approached and tapped her.'); scene.tastes = 1; await sleep(400); scene.tastes = 0.3;
+    stage('tap'); caption('He saw her, approached and tapped her.'); todo('He found you. Phones down, a foot apart, speakers facing; stay quiet while he sings.'); scene.tastes = 1; await sleep(400); scene.tastes = 0.3;
     // her brain, from the shared seed; the song she expects: the one a male of her kind (her passphrase) would sing
     const expected = Song.symbolsOf(keys.tagM);
     let result = 'nothing';
@@ -215,17 +218,17 @@ async function femaleFlow(pass, r) {
     if (!alive(r)) return;
     const accepted = result === 'accept';
     stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : 'Wrong notes. She kicks and runs.');
-    if (!accepted) { scene.kick = performance.now(); memory.rejected(); air('she kicks (modem)…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
+    if (!accepted) { scene.kick = performance.now(); memory.rejected(); todo('His song was wrong: usually a different passphrase. Check you both typed the same, then try again; she waits a little longer after each rejection.', true); air('she kicks (modem)…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
     // copulation: he opens a direct link (or, failing that, passes a note by sound)
     let got = null;
     for (let tries = 0; tries < 4 && !got && alive(r); tries++) {
       air('she accepts (modem)…'); await playFrame(P.accept(her.sid, keys));
-      stage('mate'); caption('They mate.'); air('waiting for him…');
+      stage('mate'); caption('They mate.'); air('waiting for him…'); todo('You accepted him. Keep the phones close a few seconds more while the private chat opens.');
       got = await waitFrame((b) => { const o = P.unseal(P.T.OFFER, b, her.sid, keys); if (o) return { offer: o }; const g = P.parseGift(b, her.sid, keys); return g ? { gift: g } : null; }, 14000,
         (e) => { if (e.kind === 'progress') scene.mating = e.frac; });
     }
     if (!alive(r)) return;
-    if (!got) { caption('He went quiet.'); continue; }
+    if (!got) { caption('He went quiet.'); todo('His phone went quiet. Keep the phones close; if nothing happens, Start over on both.', true); continue; }
     memory.mated(her.sid);
     if (got.gift) { resetNest(); $('nest').hidden = false; sys('No direct link opened, so his note came by sound.'); addItem({ dir: 'in', kind: 'note', text: got.gift.text }); nestStatus('by sound only', false); caption('Mated. His note is hers.'); scene.mating = 1; air('mated'); return; }
     let link = null;
@@ -233,7 +236,7 @@ async function femaleFlow(pass, r) {
     if (link) {
       air('opening the nest (modem)…'); await playFrame(P.seal(P.T.ANSWER, her.sid, keys, link.blob)); air('connecting…');
       const dc = await Promise.race([link.dc, sleep(20000).then(() => null)]);
-      if (dc && await Link.open(dc)) { scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); return; }
+      if (dc && await Link.open(dc)) { scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
     }
     // the link failed: he may still send a note by sound
     resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones. Listening for a note by sound…'); nestStatus('by sound only', false);
