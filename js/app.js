@@ -1,0 +1,352 @@
+// Opulation (web): the courtship handshake, with both flies' nervous systems on screen.
+import * as C from './cpace.js';
+import * as P from './protocol.js';
+import * as Song from './song.js';
+import { FemaleBrain, personality } from './female.js';
+import { MaleCircuit, NODES, EDGES } from './male.js';
+import { NoteDecoder, synthesize, frameSeconds } from './modem.js';
+import * as F from './flycode.js';
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const FS = 48000;
+let S, meta, bin, M;
+let role = 'male';
+
+// ---------------------------------------------------------------- loading
+const boot = (async () => {
+  S = await C.ready();
+  const [m, b, mm] = await Promise.all([fetch('data/ear.json').then(r => r.json()), fetch('data/ear.bin').then(r => r.arrayBuffer()), fetch('data/female-model.json').then(r => r.json())]);
+  meta = m; bin = b; M = mm; prepNet();
+})();
+
+// ---------------------------------------------------------------- setup screen
+function setRole(r) {
+  role = r; $('roleMale').setAttribute('aria-checked', String(r === 'male')); $('roleFemale').setAttribute('aria-checked', String(r === 'female'));
+  $('giftField').hidden = r !== 'male'; $('go').textContent = r === 'male' ? 'Begin courtship' : 'Wait to be courted';
+}
+$('roleMale').onclick = () => setRole('male'); $('roleFemale').onclick = () => setRole('female');
+try { const p = localStorage.getItem('opulation.pass'); if (p) $('pass').value = p; } catch (e) {}
+const memory = new P.Memory({ get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } });
+$('go').onclick = async () => {
+  const pass = $('pass').value;
+  if (!pass) return showSetupMsg('Choose a passphrase first: it is your species.');
+  if (role === 'male' && !$('gift').value.trim()) return showSetupMsg('Write the gift you want to pass.');
+  try { localStorage.setItem('opulation.pass', pass); } catch (e) {}
+  $('go').disabled = true;
+  try { await boot; await startAudio(); } catch (e) { $('go').disabled = false; return showSetupMsg(e.message); }
+  $('setup').hidden = true; $('ritual').hidden = false; $('giftOut').hidden = true;
+  run = { id: Math.random() };
+  if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
+};
+$('again').onclick = () => { run = null; stopListening(); $('look').hidden = true; $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
+const showSetupMsg = (t) => { $('setupMsg').textContent = t; $('setupMsg').hidden = false; };
+let run = null;
+const alive = (r) => run === r;
+
+// ---------------------------------------------------------------- audio
+let ctx = null, micNode = null, micStream = null, ignoreUntil = 0;
+const listeners = new Set();
+async function startAudio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  if (ctx.state !== 'running') await ctx.resume();
+  if (micNode) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('This browser can\'t use the microphone here (it needs https).');
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  await ctx.audioWorklet.addModule(new URL('./capture.js', import.meta.url));
+  const src = ctx.createMediaStreamSource(micStream); micNode = new AudioWorkletNode(ctx, 'opul-capture');
+  micNode.port.onmessage = (e) => { if (performance.now() < ignoreUntil) return; for (const l of listeners) l(e.data); };
+  src.connect(micNode); const sink = ctx.createGain(); sink.gain.value = 0; micNode.connect(sink).connect(ctx.destination);
+}
+function stopListening() { listeners.clear(); }
+/** play samples at 48 kHz; resolves when done. The phone ignores its own microphone meanwhile. */
+function play(x, onTime) {
+  const buf = ctx.createBuffer(1, x.length, FS); buf.copyToChannel(x, 0);
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+  const dur = x.length / FS, t0 = ctx.currentTime + 0.05; ignoreUntil = performance.now() + (dur + 0.35) * 1000;
+  src.start(t0);
+  return new Promise(res => {
+    const tick = () => { const t = ctx.currentTime - t0; if (onTime) onTime(Math.max(0, t)); if (t >= dur) { ignoreUntil = performance.now() + 300; res(); } else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+const playFrame = (bytes, onTime) => play(synthesize(bytes, 0, 'quick', { fs: FS, version: P.VERSION, amp: 0.6 }), onTime);
+
+/** wait for a modem frame that `accept(bytes)` recognises (returns non-null) */
+function waitFrame(accept, ms, onEvent) {
+  return new Promise((res) => {
+    const dec = new NoteDecoder({ sampleRate: ctx.sampleRate, onEvent: (e) => {
+      if (onEvent) onEvent(e);
+      if (e.kind === 'frame' && e.ok && e.version === P.VERSION) { const v = accept(e.bytes); if (v) done(v); }
+    } });
+    const l = (x) => dec.push(x); listeners.add(l);
+    const t = setTimeout(() => done(null), ms);
+    function done(v) { clearTimeout(t); listeners.delete(l); res(v); }
+  });
+}
+
+// ---------------------------------------------------------------- the stage
+const STAGES = ['orient', 'tap', 'sing', 'decide', 'mate'];
+function stage(s, bad = false) {
+  const i = STAGES.indexOf(s);
+  for (const li of $('stages').children) { const j = STAGES.indexOf(li.dataset.s); li.className = j < i ? 'done' : j === i ? (bad ? 'bad' : 'now') : ''; }
+  scene.stage = s; scene.bad = bad; scene.t0 = performance.now();
+}
+const caption = (t) => { $('caption').textContent = t; };
+const air = (t) => { $('air').textContent = t; };
+
+// ---------------------------------------------------------------- the male
+async function maleFlow(pass, giftText, r) {
+  $('brainMale').classList.remove('dim'); $('fTitle').textContent = 'Her, as his phone predicts her';
+  stage('orient'); caption('He looks for her.'); air('');
+  const seen = await lookForHer(r);
+  if (!alive(r) || !seen) return;
+  scene.sees = 1; caption('He sees her, and turns toward her.'); await sleep(900);
+  let him; try { him = C.respond(pass, seen.sid, seen.Ya); } catch (e) { caption('That was not a fly.'); return; }
+  const keys = him.keys, sy = Song.symbolsOf(keys.tagM), sch = Song.schedule(sy, M);
+  // he can build her exactly (the seed comes from the key) and compose the song she was made to want
+  const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
+  const snaps = []; const L = new Song.Listener(brain, sy, M); L.onFrame = (st, b) => snaps.push({ st, r: snapR(b) }); L.advance(sy, true);
+  let verdict = null;
+  for (let tries = 0; tries < 3 && !verdict && alive(r); tries++) {
+    stage('tap'); caption('He taps her with a foreleg.'); scene.tastes = 1; air(tries ? `tapping again (${tries + 1})…` : 'tapping (modem, 2.3 s)…');
+    await playFrame(P.tap(seen.sid, him.Yb)); scene.tastes = 0.3; await sleep(500);
+    stage('sing'); caption('He extends one wing and sings: sine song, then pulse song. The song is his key, proven.');
+    air('singing (3.7 s)…'); resetNotes(); oscSet(Song.renderTrue(sch, M, 4000), 4000);
+    await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005)); if (k >= 0) showFemale(snaps[k].st, snaps[k].r, true); });
+    scene.songT = -1; stage('decide'); caption('She decides.'); air('waiting for her…');
+    verdict = await waitFrame((b) => P.parseVerdict(b, seen.sid, keys), 9000);
+  }
+  if (!alive(r)) return;
+  if (verdict === 'wrongkind') { stage('decide', true); caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); air(''); return; }
+  if (verdict !== 'accept') { stage('decide', true); scene.kick = performance.now(); caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.'); air(''); return; }
+  stage('mate'); caption('She slows and opens, and she tastes right. They mate: the gift passes, sealed.');
+  const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
+  await playFrame(g, (t) => { scene.mating = Math.min(1, t / dur); air(`passing the gift ${Math.round(100 * Math.min(1, t / dur))}%`); });
+  caption('Done. The gift is hers; this pairing is spent.'); air('mated'); scene.mating = 1;
+}
+/** his camera, until he has read her face */
+async function lookForHer(r) {
+  $('look').hidden = false; $('face').hidden = true; $('cam').hidden = false; $('lookCap').textContent = 'Point your camera at her face. Her eyes hold her half of the key.';
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+  catch (e) { $('lookCap').textContent = 'He needs the camera to see her (' + e.message + ').'; return null; }
+  const v = $('video'); v.srcObject = stream; await v.play().catch(() => {});
+  const view = $('camView'), g = view.getContext('2d'), work = document.createElement('canvas'), wg = work.getContext('2d', { willReadFrequently: true });
+  let found = null, best = 0;
+  while (alive(r) && !found) {
+    await sleep(90);
+    const vw = v.videoWidth, vh = v.videoHeight; if (!vw) continue;
+    const w = 640, h = Math.round(640 * vh / vw); work.width = w; work.height = h; view.width = w; view.height = h;
+    wg.drawImage(v, 0, 0, w, h); const rgba = wg.getImageData(0, 0, w, h).data;
+    g.drawImage(work, 0, 0); g.fillStyle = 'rgba(18,11,23,.35)'; g.fillRect(0, 0, w, h);
+    const res = F.read(F.toGrey(rgba, w, h), w, h);
+    if (res && res.finders) {
+      // show what he sees: each facet he reads lights up
+      const Lc = F.layout().cells;
+      for (let i = 0; i < Lc.length; i++) { const z = res.Hm[6] * Lc[i].x + res.Hm[7] * Lc[i].y + res.Hm[8], x = (res.Hm[0] * Lc[i].x + res.Hm[1] * Lc[i].y + res.Hm[2]) / z, y = (res.Hm[3] * Lc[i].x + res.Hm[4] * Lc[i].y + res.Hm[5]) / z;
+        g.fillStyle = res.bits[i] ? 'rgba(255,111,145,.9)' : 'rgba(94,230,208,.55)'; g.fillRect(x - 1.5, y - 1.5, 3, 3); }
+      g.strokeStyle = '#ffb547'; g.lineWidth = 2; for (const b of res.finders) { g.beginPath(); g.arc(b.x, b.y, b.r + 4, 0, 7); g.stroke(); }
+      const look = P.parseLook(res.payload);
+      if (look) found = look; else { best++; $('lookCap').textContent = 'He glimpses her… hold steady, fill the frame with her face.'; }
+    }
+  }
+  stream.getTracks().forEach(t => t.stop());
+  if (found) { $('look').hidden = true; }
+  return found;
+}
+
+// ---------------------------------------------------------------- the female
+async function femaleFlow(pass, r) {
+  $('brainMale').classList.add('dim'); $('fTitle').textContent = 'Her ears and song pathway';
+  while (alive(r)) {
+    stage('orient'); resetNotes(); air('');
+    const wait = memory.refractory();
+    if (wait > 0) { $('look').hidden = true; caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); await sleep(1000); continue; }
+    // a fresh face each time: her half of the key exchange, in her eyes
+    const her = new C.Initiator(pass), bits = F.facetBits(P.look(her));
+    $('look').hidden = false; $('cam').hidden = true; $('face').hidden = false; F.drawCanvas($('face').getContext('2d'), bits, 1000);
+    $('lookCap').textContent = 'Show him your face: hold your screen up to his camera, bright and still.';
+    caption('She waits to be seen.'); air('listening…');
+    const t = await waitFrame((b) => P.parseTap(b, her.sid), 3600000, (e) => { if (e.kind === 'header') air('he taps her…'); });
+    if (!alive(r) || !t) return;
+    let keys; try { keys = her.finish(t.Yb); } catch (e) { caption('That was not a fly.'); continue; }
+    $('look').hidden = true; scene.sees = 1;
+    stage('tap'); caption('He saw her, approached and tapped her.'); scene.tastes = 1; await sleep(400); scene.tastes = 0.3;
+    // her brain, from the shared seed; the song she expects: the one a male of her kind (her passphrase) would sing
+    const expected = Song.symbolsOf(keys.tagM);
+    let result = 'nothing';
+    while (result === 'nothing' && alive(r)) {
+      const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
+      const L = new Song.Listener(brain, expected, M), queue = []; L.onFrame = (st, b) => queue.push({ st, r: snapR(b) });
+      stage('sing'); caption('She listens for his song.'); air('listening for song…'); resetNotes();
+      result = await hearSong(L, queue, expected, r);
+    }
+    if (!alive(r)) return;
+    const accepted = result === 'accept';
+    stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : 'Wrong notes. She kicks and runs.');
+    if (!accepted) { scene.kick = performance.now(); memory.rejected(); air('she kicks (modem)…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
+    let gift = null;
+    for (let tries = 0; tries < 3 && !gift && alive(r); tries++) {
+      air('she accepts (modem)…'); await playFrame(P.accept(her.sid, keys));
+      stage('mate'); caption('They mate. The gift is passing…'); air('receiving the gift…');
+      gift = await waitFrame((b) => P.parseGift(b, her.sid, keys), 20000, (e) => { if (e.kind === 'progress') { scene.mating = e.frac; air(`receiving ${Math.round(100 * e.frac)}%`); } });
+    }
+    if (!alive(r)) return;
+    if (!gift) { caption('He never passed the gift.'); continue; }
+    scene.mating = 1; memory.mated(her.sid);
+    $('giftOut').hidden = false; $('giftText').textContent = gift.text ?? `${gift.bytes.length} bytes`;
+    caption('She has his gift. She is mated: this pairing is spent.'); air('mated'); return;
+  }
+}
+/** listen to the song as it arrives; her brain runs train by train and replays in real time just behind it */
+function hearSong(L, queue, expected, r) {
+  return new Promise((res) => {
+    const heard = []; let finished = false, start = 0, k = 0;
+    const finish = () => { if (finished) return; finished = true; L.advance(heard.slice(), true); };
+    const det = new Song.SongDetector(M, ctx.sampleRate, () => {}, () => { scene.pulseFlash = performance.now(); if (!start) start = performance.now() + 800; });
+    det.onTrain = (syms, n) => { heard.push(...syms); if (n >= Song.TRAINS) finish(); else L.advance(heard.slice(), false); };
+    const l = (x) => det.push(x); listeners.add(l);
+    const giveUp = setTimeout(() => { det.flush(); finish(); }, 16000);
+    const tick = () => {
+      if (!alive(r)) { listeners.delete(l); clearTimeout(giveUp); return; }
+      if (finished && !start) start = performance.now();
+      if (start) { const want = Math.floor((performance.now() - start) / 5); while (k < queue.length && k <= want) { const q = queue[k++]; showFemale(q.st, q.r, false); } }
+      if (finished && k >= queue.length) { listeners.delete(l); clearTimeout(giveUp); return res(heard.length ? (L.verdict || 'reject') : 'nothing'); }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+// ---------------------------------------------------------------- her brain on screen
+let pos = null, areaIdx = null, readSet = null, vpo = [];
+const AREAS = [['JO', ['JO']], ['AMMC', ['AMMC']], ['SAD', ['SAD']], ['WED', ['WED']], ['AVLP', ['AVLP', 'PVLP']], ['GNG', ['GNG']], ['IPS', ['IPS', 'SPS']]];
+function prepNet() {
+  const c = $('fNet'), W = c.width, H = c.height; let x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18;
+  for (let i = 0; i < meta.n; i++) { x0 = Math.min(x0, meta.x[i]); x1 = Math.max(x1, meta.x[i]); y0 = Math.min(y0, meta.y[i]); y1 = Math.max(y1, meta.y[i]); }
+  const s = Math.min((W - 40) / (x1 - x0), (H - 40) / (y1 - y0)), ox = (W - s * (x1 - x0)) / 2, oy = (H - s * (y1 - y0)) / 2;
+  pos = new Float32Array(2 * meta.n); for (let i = 0; i < meta.n; i++) { pos[2 * i] = ox + s * (meta.x[i] - x0); pos[2 * i + 1] = oy + s * (meta.y[i] - y0); }
+  areaIdx = AREAS.map(([, nps]) => meta.np.map((n, i) => nps.includes(n) ? i : -1).filter(i => i >= 0));
+  readSet = new Set(M.readout); vpo = M.named.vpoEN || [];
+  $('fAreas').innerHTML = AREAS.map(([n]) => `<div class="area"><i><b style="height:0"></b></i>${n}</div>`).join('');
+  const bar = $('notes'); bar.innerHTML = '<span></span>'.repeat(64);
+  $('rTheta').style.left = '60%';
+  drawNet(new Uint8Array(meta.n)); drawMale();
+}
+function snapR(b) { const a = new Uint8Array(b.N); for (let i = 0; i < b.N; i++) a[i] = Math.min(255, b.r[i] >> 8); return a; }
+function resetNotes() { for (const s of $('notes').children) s.className = ''; $('rBar').style.width = '0'; $('rVal').textContent = ''; }
+function showFemale(st, r, predicted) {
+  drawNet(r);
+  const bars = $('fAreas').querySelectorAll('b');
+  areaIdx.forEach((ids, k) => { let s = 0; for (const i of ids) s += r[i]; const m = ids.length ? s / ids.length / 255 : 0; bars[k].style.height = Math.min(100, 100 * Math.sqrt(m * 4)) + '%'; });
+  const full = Song.LISTEN.THETA / 0.6; $('rBar').style.width = Math.min(100, 100 * st.R / full) + '%';
+  $('rVal').textContent = st.verdict ? (st.verdict === 'accept' ? 'accepts' : 'rejects') : `${st.matched} right · ${st.wrong} wrong${predicted ? ' (predicted)' : ''}`;
+  for (const p of st.pulses) if (p.k >= 0) $('notes').children[p.k].className = st.cur === 'match' ? 'm' : 'w';
+}
+function drawNet(r) {
+  const c = $('fNet'), g = c.getContext('2d'); g.globalCompositeOperation = 'source-over'; g.fillStyle = '#0b070e'; g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < meta.n; i++) {
+    const a = r[i] / 255, x = pos[2 * i], y = pos[2 * i + 1];
+    if (a < 0.01) { g.fillStyle = 'rgba(120,90,130,0.10)'; g.fillRect(x, y, 1.6, 1.6); continue; }
+    const jo = i < meta.tiers[0], col = jo ? '94,230,208' : readSet.has(i) ? '255,111,145' : '255,181,71';
+    g.fillStyle = `rgba(${col},${Math.min(1, 0.25 + a * 1.5)})`; const s = 1.6 + a * 4; g.fillRect(x - s / 2, y - s / 2, s, s);
+  }
+  g.globalCompositeOperation = 'source-over';
+  for (const i of vpo) { g.strokeStyle = 'rgba(239,228,210,0.8)'; g.beginPath(); g.arc(pos[2 * i], pos[2 * i + 1], 6 + r[i] / 40, 0, 7); g.stroke(); }
+  if (vpo.length) { g.fillStyle = '#efe4d2'; g.font = '20px -apple-system, sans-serif'; g.fillText('vpoEN', pos[2 * vpo[0]] + 9, pos[2 * vpo[0]] - 6); }
+  g.font = '18px -apple-system, sans-serif'; g.fillStyle = 'rgba(94,230,208,.9)'; g.fillText('■ ears (Johnston\'s organ)', 12, c.height - 12); g.fillStyle = 'rgba(255,111,145,.9)'; g.textAlign = 'right'; g.fillText('■ song pathway → vpoEN', c.width - 12, c.height - 12); g.textAlign = 'left';
+}
+
+// ---------------------------------------------------------------- his circuit on screen
+const circuit = new MaleCircuit(); let lastT = 0, pulseIdx = 0;
+const NPOS = { LC10a: [0.1, 0.25], vAB3: [0.1, 0.72], P1: [0.32, 0.48], pIP10: [0.52, 0.48], dPR1: [0.72, 0.22], vPR6: [0.72, 0.48], TN1A: [0.72, 0.76], wing: [0.92, 0.48] };
+function driveMale(sch, t) {
+  if (t < lastT) { lastT = 0; pulseIdx = 0; }
+  const dt = Math.max(0.001, t - lastT); lastT = t;
+  const tick = t / M.song.tick; let pulse = false;
+  while (pulseIdx < sch.pulses.length && sch.pulses[pulseIdx].t <= tick) { pulse = true; pulseIdx++; }
+  const hum = sch.hums.some(h => tick >= h.t0 && tick < h.t1);
+  circuit.step(dt, { sees: scene.sees, tastes: scene.tastes, singing: true, pulse, hum }); scene.wing = circuit.a.wing; drawMale();
+}
+function idleMale() { if (scene.songT >= 0) return; circuit.step(1 / 60, { sees: scene.sees, tastes: scene.tastes }); scene.wing = circuit.a.wing; drawMale(); }
+function drawMale() {
+  const c = $('mNet'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#0b070e'; g.fillRect(0, 0, W, H);
+  const P = (id) => [NPOS[id][0] * W, NPOS[id][1] * H];
+  for (const [a, b] of EDGES) { const [x0, y0] = P(a), [x1, y1] = P(b), act = circuit.a[a]; g.strokeStyle = `rgba(255,181,71,${0.15 + 0.7 * act})`; g.lineWidth = 1 + 3 * act; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+  for (const n of NODES) {
+    const [x, y] = P(n.id), a = circuit.a[n.id], rad = 16 + 8 * a;
+    const grd = g.createRadialGradient(x, y, 2, x, y, rad * 2); grd.addColorStop(0, `rgba(255,181,71,${0.2 + 0.8 * a})`); grd.addColorStop(1, 'rgba(255,181,71,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, rad * 2, 0, 7); g.fill();
+    g.fillStyle = '#160e1a'; g.strokeStyle = `rgba(239,228,210,${0.4 + 0.6 * a})`; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#efe4d2'; g.font = '600 20px -apple-system, sans-serif'; g.textAlign = 'center'; g.fillText(n.label, x, y + 40);
+    g.fillStyle = 'rgba(168,154,168,.95)'; g.font = '16px -apple-system, sans-serif'; g.fillText(n.role, x, y + 60);
+  }
+  g.textAlign = 'left';
+}
+let osc = null, oscFs = 4000;
+function oscSet(x, fs) { osc = x; oscFs = fs; }
+function drawOsc() {
+  const c = $('osc'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#0b070e'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(94,230,208,.25)'; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+  if (!osc || scene.songT < 0) { g.fillStyle = 'rgba(168,154,168,.8)'; g.font = '18px -apple-system, sans-serif'; g.fillText('his song (true pitch) appears here as he sings', 12, H - 14); return; }
+  const span = 0.5, n0 = Math.floor((scene.songT - span) * oscFs), n1 = Math.floor(scene.songT * oscFs);
+  g.strokeStyle = '#5ee6d0'; g.lineWidth = 1.2; g.beginPath();
+  for (let x = 0; x < W; x++) { const n = n0 + Math.floor((n1 - n0) * x / W), v = n >= 0 && n < osc.length ? osc[n] : 0; const y = H / 2 - v * H * 1.3; x ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+}
+
+// ---------------------------------------------------------------- the two flies
+const scene = { stage: 'orient', bad: false, t0: 0, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, pulseFlash: 0 };
+function resetScene() { Object.assign(scene, { stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0 }); resetNotes(); }
+function fly(g, x, y, ang, s, { wing = 0, female = false, legReach = 0, ovi = 0 }) {
+  g.save(); g.translate(x, y); g.rotate(ang); g.scale(s, s);
+  g.lineWidth = 2.2 / s; g.strokeStyle = '#efe4d2'; g.lineJoin = 'round'; g.lineCap = 'round';
+  // legs
+  for (const side of [-1, 1]) for (const [lx, a, l] of [[10, -0.7, 22], [0, -1.5, 20], [-10, -2.3, 24]]) {
+    let aa = a; if (lx === 10 && side === 1 && legReach) aa = -0.2 - 0.3 * legReach;
+    const ex = lx + Math.cos(aa) * l * (lx === 10 && legReach ? 1 + 0.6 * legReach : 1), ey = side * Math.sin(-aa) * l;
+    g.beginPath(); g.moveTo(lx, side * 6); g.quadraticCurveTo((lx + ex) / 2, side * (10 + Math.abs(ey) * 0.4), ex, ey); g.stroke();
+  }
+  // wings (one extended and vibrating when singing)
+  const vib = wing ? Math.sin(performance.now() / 6) * 0.18 * wing : 0;
+  for (const side of [-1, 1]) {
+    const open = side === -1 ? wing * 1.25 + vib : 0;
+    g.save(); g.rotate(side * (0.18 + open)); g.fillStyle = 'rgba(239,228,210,0.10)'; g.beginPath(); g.ellipse(-26, side * 6, 30, 9, 0, 0, 7); g.fill(); g.stroke(); g.restore();
+  }
+  // abdomen (bands; hers rounder), thorax, head, red eyes
+  g.fillStyle = '#2b1d2e'; g.beginPath(); g.ellipse(-20 - 6 * (female ? 1 : 0), 0, female ? 20 : 16, female ? 12 : 10, 0, 0, 7); g.fill(); g.stroke();
+  for (let k = 0; k < (female ? 4 : 3); k++) { g.beginPath(); g.moveTo(-14 - k * 7 - (female ? 6 : 0), -8); g.quadraticCurveTo(-17 - k * 7 - (female ? 6 : 0), 0, -14 - k * 7 - (female ? 6 : 0), 8); g.stroke(); }
+  if (!female) { g.fillStyle = '#efe4d2'; g.beginPath(); g.ellipse(-31, 0, 4, 6, 0, 0, 7); g.fill(); }
+  if (female && ovi) { g.beginPath(); g.moveTo(-46, 0); g.lineTo(-46 - 10 * ovi, 0); g.stroke(); }
+  g.fillStyle = '#3a2a3f'; g.beginPath(); g.ellipse(2, 0, 11, 9, 0, 0, 7); g.fill(); g.stroke();
+  g.beginPath(); g.ellipse(17, 0, 6, 8, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = '#e2453f'; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(19, sd * 6, 3.6, 4.2, 0, 0, 7); g.fill(); }
+  g.restore();
+}
+function drawFlies() {
+  const c = $('flies'), g = c.getContext('2d'), W = c.width, H = c.height, now = performance.now(), dt = (now - scene.t0) / 1000;
+  g.clearRect(0, 0, W, H);
+  // ground: a leaf, lit from above
+  const grd = g.createRadialGradient(W / 2, H * 0.6, 20, W / 2, H * 0.6, W * 0.6); grd.addColorStop(0, 'rgba(120,160,90,0.18)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(160,190,120,0.18)'; g.lineWidth = 1; for (let k = -4; k <= 4; k++) { g.beginPath(); g.moveTo(W / 2, H * 0.62); g.quadraticCurveTo(W / 2 + k * 60, H * 0.4, W / 2 + k * 130, H * (k % 2 ? 0.05 : 0.95)); g.stroke(); }
+  const fx = W * 0.62, fy = H * 0.5; let mx = W * 0.18, my = H * 0.5, ma = 0, legReach = 0, ovi = 0, fxo = 0;
+  const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  const st = scene.stage;
+  if (st === 'orient') { mx = W * 0.12 + W * 0.18 * ease(dt / 2.5); ma = -0.4 + 0.4 * ease(dt / 1.5); }
+  else { mx = W * 0.30; }
+  if (st === 'tap') { mx = W * 0.30 + W * 0.08 * ease(dt / 0.8); legReach = 0.5 + 0.5 * Math.sin(dt * 9); }
+  if (st === 'sing') mx = W * 0.38;
+  if (st === 'decide') { mx = W * 0.38; if (scene.bad) { const k = (now - scene.kick) / 1000; ovi = Math.min(1, k * 3); fxo = W * 0.25 * ease(k / 1.2); mx = W * 0.38 - W * 0.12 * ease(k / 1.5); } }
+  if (st === 'mate') { mx = W * 0.38 + (fx - W * 0.38 - 18) * ease(dt / 1.5); my = fy - 6 * ease(dt / 1.5); }
+  fly(g, fx + fxo, fy, Math.PI, 2.0, { female: true, ovi, wing: 0 });
+  const singing = st === 'sing' ? Math.max(0.6, scene.wing) : 0;
+  fly(g, mx, my, ma, 1.8, { wing: singing, legReach });
+  // pulse flashes on her side while she hears song
+  if (now - scene.pulseFlash < 80) { g.strokeStyle = 'rgba(94,230,208,.6)'; g.beginPath(); g.arc(fx + 30, fy, 60, 0, 7); g.stroke(); }
+  if (st === 'sing' && scene.songT >= 0) { g.strokeStyle = `rgba(94,230,208,${0.2 + 0.6 * scene.wing})`; for (let k = 1; k <= 3; k++) { g.beginPath(); g.arc(mx - 10, my - 40, k * 18 * (1 + scene.wing * 0.3), -1.2, 0.2); g.stroke(); } }
+  if (st === 'mate') { g.fillStyle = 'rgba(94,230,208,.9)'; g.fillRect(W * 0.2, H - 18, W * 0.6 * scene.mating, 4); g.strokeStyle = 'rgba(94,230,208,.4)'; g.strokeRect(W * 0.2, H - 18, W * 0.6, 4); }
+}
+function loop() { if (!$('ritual').hidden) { drawFlies(); drawOsc(); idleMale(); } requestAnimationFrame(loop); }
+requestAnimationFrame(loop);

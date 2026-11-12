@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Opulation</title>
+<meta name="theme-color" content="#120b17">
+<link rel="stylesheet" href="css/opulation.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%99%80%3C/text%3E%3C/svg%3E">
+<script src="js/vendor/libsodium-sumo.js"></script>
+<script src="js/vendor/libsodium-wrappers.js"></script>
+</head>
+<body>
+<header>
+  <h1>Opulation</h1>
+  <p class="tag">Two phones may only share a secret once they have courted like fruit flies.</p>
+</header>
+
+<main>
+  <section id="setup" class="card">
+    <div class="roles" role="radiogroup" aria-label="Your part in the ritual">
+      <button id="roleMale" class="role" role="radio" aria-checked="true">
+        <span class="sym">♂</span><span class="rt">Court</span><span class="rs">I'm sending</span>
+      </button>
+      <button id="roleFemale" class="role" role="radio" aria-checked="false">
+        <span class="sym">♀</span><span class="rt">Be courted</span><span class="rs">I'm receiving</span>
+      </button>
+    </div>
+    <label class="field">Shared passphrase<span class="hint">Your species. Only a mate with the same one will do.</span>
+      <input id="pass" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. bromeliad at dusk">
+    </label>
+    <label class="field" id="giftField">The gift<span class="hint">What you'll pass if she accepts you.</span>
+      <textarea id="gift" rows="3" maxlength="200" placeholder="A secret note"></textarea>
+    </label>
+    <button id="go" class="go">Begin courtship</button>
+    <p id="setupMsg" class="msg" hidden></p>
+    <p class="small">Hold the phones a foot apart, speakers facing. Both listen and both sing, in turns.</p>
+  </section>
+
+  <section id="ritual" hidden>
+    <ol id="stages" class="stages" aria-label="The ritual">
+      <li data-s="orient">Orient</li><li data-s="tap">Tap</li><li data-s="sing">Sing</li><li data-s="decide">She decides</li><li data-s="mate">Mate</li>
+    </ol>
+    <div id="look" class="look" hidden>
+      <canvas id="face" width="1000" height="1000" aria-label="Her face: the data is in her compound eyes"></canvas>
+      <div id="cam" class="cam" hidden><video id="video" playsinline muted autoplay></video><canvas id="camView" width="640" height="480"></canvas></div>
+      <p id="lookCap" class="lookcap"></p>
+    </div>
+    <div class="theatre">
+      <canvas id="flies" width="720" height="300" aria-label="The two flies"></canvas>
+      <p id="caption" class="caption" aria-live="polite"></p>
+    </div>
+
+    <div class="brains">
+      <figure id="brainFemale" class="brain">
+        <figcaption><b id="fTitle">Her ears and song pathway</b><span>FlyWire auditory network · 4,222 neurons, 1.35 M synapses</span></figcaption>
+        <canvas id="fNet" width="720" height="460"></canvas>
+        <div class="areas" id="fAreas"></div>
+        <div class="meter"><div class="mlabel"><span>Receptivity</span><span id="rVal"></span></div><div class="bar"><i id="rBar"></i><b id="rTheta"></b></div></div>
+        <div class="notes" id="notes" aria-label="Each note of the song: matched or wrong"></div>
+        <p class="fine" id="fFine">Each phone builds her from the shared session key, so his phone runs the same female as hers, neuron for neuron.</p>
+      </figure>
+      <figure id="brainMale" class="brain">
+        <figcaption><b>His courtship circuit</b><span>schematic, from the literature: FlyWire has no male</span></figcaption>
+        <canvas id="mNet" width="720" height="300"></canvas>
+        <canvas id="osc" width="720" height="110" aria-label="His song"></canvas>
+      </figure>
+    </div>
+
+    <section id="giftOut" class="card gift" hidden><h2>Her gift from him</h2><p id="giftText"></p></section>
+    <div class="row"><button id="again" class="ghost">Start over</button><span id="air" class="air"></span></div>
+  </section>
+</main>
+<footer>
+  <p>Built on <a href="https://samuelling.github.io/FlyHarp/">FlyHarp</a>'s Tonnectome and <a href="https://samuelling.github.io/Screech/">Screech</a>'s modem. The lock is CPace (a password key exchange); the courtship is how you watch it turn. <a href="https://github.com/samuelling/Opulation">Source</a></p>
+</footer>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

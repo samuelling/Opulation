@@ -1,10 +1,10 @@
 // CPace (draft-irtf-cfrg-cpace-21), suite CPACE-RISTR255-SHA512, initiator/responder setting, on libsodium.
-// The male phone is the initiator (A), the female phone the responder (B).
+// The female phone is the initiator (A): her message is shown as her face (js/flycode.js). The male is the responder (B).
 // Checked against the draft's Appendix B.3 test vectors (tools/test.mjs).
 //
 // On top of CPace: explicit key confirmation and the keys Opulation needs, all derived from ISK:
-//   tagF  = HMAC-SHA512(kc, "OPUL tag female" || transcript)[0..16]   sent by her (turn 2)
-//   tagM  = HMAC-SHA512(kc, "OPUL tag male"   || transcript)[0..16]   sung by him (turn 3)
+//   tagF  = HMAC-SHA512(kc, "OPUL tag female" || transcript)[0..16]   sent by her when she accepts
+//   tagM  = HMAC-SHA512(kc, "OPUL tag male"   || transcript)[0..16]   sung by him
 //   seed  = HMAC-SHA512(ISK, "OPUL female seed")[0..32]              seeds the female connectome
 //   kx    = HMAC-SHA512(ISK, "OPUL transfer")[0..32]                  encrypts the transfer
 // where kc = HMAC-SHA512(ISK, "OPUL confirm")[0..32].
@@ -50,7 +50,7 @@ const hmac = (k, ...parts) => S.crypto_auth_hmacsha512(cat(...parts), k.length =
 /** Normalise a passphrase the same way on every platform (NFC, UTF-8). */
 export const prsOf = (pass) => te.encode(pass.normalize('NFC'));
 // Channel identifier: protocol name and version. Both roles are fixed (male = A, female = B).
-export const CI = lvCat(te.encode('Opulation/1'), te.encode('male'), te.encode('female'));
+export const CI = lvCat(te.encode('Opulation/1'), te.encode('female'), te.encode('male'));
 
 /** Derive everything Opulation needs from ISK and the transcript. */
 export function derive(ISK, transcript) {
@@ -64,10 +64,10 @@ export function derive(ISK, transcript) {
   };
 }
 
-/** Male (initiator). start() -> {sid, Ya}; then finish(Yb) -> keys. */
-export class Male {
+/** Initiator (her): new Initiator(pass) -> {sid, Ya}; then finish(Yb) -> keys. */
+export class Initiator {
   constructor(pass, { sid, ya, AD = new Uint8Array(0) } = {}) {
-    this.PRS = prsOf(pass); this.sid = sid || S.randombytes_buf(16); this.AD = AD;
+    this.PRS = prsOf(pass); this.sid = sid || S.randombytes_buf(8); this.AD = AD;
     this.g = calculateGenerator(this.PRS, CI, this.sid);
     this.ya = ya || S.crypto_core_ristretto255_scalar_random();
     this.Ya = S.crypto_scalarmult_ristretto255(this.ya, this.g);
@@ -77,8 +77,8 @@ export class Male {
     return derive(isk(this.sid, K, this.Ya, this.AD, Yb, ADb), tr);
   }
 }
-/** Female (responder): from the male's (sid, Ya) -> {Yb, keys}. */
-export function female(pass, sid, Ya, { yb, AD = new Uint8Array(0), ADa = new Uint8Array(0) } = {}) {
+/** Responder (him): from her (sid, Ya) -> {Yb, keys}. */
+export function respond(pass, sid, Ya, { yb, AD = new Uint8Array(0), ADa = new Uint8Array(0) } = {}) {
   const PRS = prsOf(pass), g = calculateGenerator(PRS, CI, sid);
   const y = yb || S.crypto_core_ristretto255_scalar_random();
   const Yb = S.crypto_scalarmult_ristretto255(y, g);

@@ -1,37 +1,36 @@
 // The ritual as a protocol. Pure logic: no audio, no DOM, so it runs in Node tests too.
 //
-//   1  COURT   he → her   (modem)   sid(16) | Ya(32)                    she sees him: orient, tap
-//   2  ANSWER  her → him  (modem)   sid4 | Yb(32) | tagF(16)            her pheromones: is she his kind?
-//   3  SONG    he → her   (song)    tagM as 64 inter-pulse intervals     her brain decides
-//   4  ACCEPT  her → him  (modem)   sid4 | MAC(kc,'accept')(16)         she slows, opens
-//      KICK    her → him  (modem)   sid4                                 she kicks; he is conditioned
-//   5  GIFT    he → her   (modem)   sid4 | nonce(24) | sealed gift       copulation: the transfer
+//   LOOK    her face      (her screen → his camera)  v(1) | sid(8) | Ya(32)        he sees her: orient
+//   TAP     he → her      (modem)   1 | sid4 | Yb(32)                            he taps her
+//   SONG    he → her      (song)    tagM as 64 inter-pulse intervals             her brain decides
+//   ACCEPT  her → him     (modem)   4 | sid4 | tagF(16)                          she slows and opens; tagF is her
+//                                                                                 pheromone: proof she is his kind
+//   KICK    her → him     (modem)   6 | sid4                                     she kicks; she won't listen for a while
+//   GIFT    he → her      (modem)   5 | sid4 | nonce(24) | sealed gift            copulation: the transfer
 //
-// Frames use the Screech modem (frame version 5). Byte 0 of every payload is the turn number.
-// The gift is sealed with XChaCha20-Poly1305 under kx, with the turn header as associated data.
+// Modem frames use the Screech modem (frame version 5). The gift is sealed with XChaCha20-Poly1305 under kx,
+// with its 5-byte header as associated data.
 import * as C from './cpace.js';
 
-export const VERSION = 5;
-export const T = { COURT: 1, ANSWER: 2, ACCEPT: 4, KICK: 6, GIFT: 5 };
+export const VERSION = 5, LOOK_VERSION = 1;
+export const T = { TAP: 1, ACCEPT: 4, KICK: 6, GIFT: 5 };
 const te = new TextEncoder(), td = new TextDecoder();
 const head = (t, sid) => Uint8Array.of(t, sid[0], sid[1], sid[2], sid[3]);
 const sid4eq = (a, b) => a[1] === b[0] && a[2] === b[1] && a[3] === b[2] && a[4] === b[3];
 
-export function court(male) { return C.cat(Uint8Array.of(T.COURT), male.sid, male.Ya); }
-export function parseCourt(b) { if (b.length !== 49 || b[0] !== T.COURT) return null; return { sid: b.slice(1, 17), Ya: b.slice(17, 49) }; }
-
-export function answer(sid, Yb, keys) { return C.cat(head(T.ANSWER, sid).subarray(0, 5), Yb, keys.tagF); }
-export function parseAnswer(b, sid) { if (b.length !== 53 || b[0] !== T.ANSWER || !sid4eq(b, sid)) return null; return { Yb: b.slice(5, 37), tagF: b.slice(37, 53) }; }
-
-const acceptMac = (keys) => C.sodium().crypto_auth_hmacsha512(te.encode('OPUL accept'), keys.kx).subarray(0, 16);
-export function accept(sid, keys) { return C.cat(head(T.ACCEPT, sid), acceptMac(keys)); }
+/** her face's 41 bytes */
+export function look(her) { return C.cat(Uint8Array.of(LOOK_VERSION), her.sid, her.Ya); }
+export function parseLook(b) { if (!b || b.length !== 41 || b[0] !== LOOK_VERSION) return null; return { sid: b.slice(1, 9), Ya: b.slice(9, 41) }; }
+export function tap(sid, Yb) { return C.cat(head(T.TAP, sid), Yb); }
+export function parseTap(b, sid) { if (b.length !== 37 || b[0] !== T.TAP || !sid4eq(b, sid)) return null; return { Yb: b.slice(5, 37) }; }
+export function accept(sid, keys) { return C.cat(head(T.ACCEPT, sid), keys.tagF); }
 export function kick(sid) { return head(T.KICK, sid); }
+/** his reading of her verdict: 'accept' only with the right tagF; 'wrongkind' if she accepted with a different one */
 export function parseVerdict(b, sid, keys) {
   if (b.length >= 5 && b[0] === T.KICK && sid4eq(b, sid)) return 'kick';
-  if (b.length === 21 && b[0] === T.ACCEPT && sid4eq(b, sid) && C.tagsEqual(b.subarray(5), acceptMac(keys))) return 'accept';
+  if (b.length === 21 && b[0] === T.ACCEPT && sid4eq(b, sid)) return C.tagsEqual(b.subarray(5), keys.tagF) ? 'accept' : 'wrongkind';
   return null;
 }
-
 /** gift: {kind: 'text', text} -> payload. */
 export function gift(sid, keys, g) {
   const S = C.sodium(), h = head(T.GIFT, sid), nonce = S.randombytes_buf(24);

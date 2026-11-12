@@ -26,12 +26,12 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
 }
 // ---- handshake round trip
 {
-  const m = new C.Male('apple pie');
-  const f = C.female('apple pie', m.sid, m.Ya);
+  const m = new C.Initiator('apple pie');
+  const f = C.respond('apple pie', m.sid, m.Ya);
   const mk = m.finish(f.Yb);
   ok(C.tagsEqual(mk.tagF, f.keys.tagF) && C.tagsEqual(mk.tagM, f.keys.tagM) && C.tagsEqual(mk.seed, f.keys.seed), 'same passphrase -> same tags and seed');
-  const m2 = new C.Male('apple pie');
-  const f2 = C.female('apple pi', m2.sid, m2.Ya);
+  const m2 = new C.Initiator('apple pie');
+  const f2 = C.respond('apple pi', m2.sid, m2.Ya);
   const mk2 = m2.finish(f2.Yb);
   ok(!C.tagsEqual(mk2.tagF, f2.keys.tagF) && !C.tagsEqual(mk2.seed, f2.keys.seed), 'different passphrase -> different tags and seed');
 }
@@ -39,15 +39,19 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
 // ---- the whole ritual as bytes, and the turns through the modem
 {
   const P = await import('../js/protocol.js'), Mo = await import('../js/modem.js');
-  const m = new C.Male('pickled herring'), b1 = P.court(m), c1 = P.parseCourt(b1);
-  const f = C.female('pickled herring', c1.sid, c1.Ya), b2 = P.answer(c1.sid, f.Yb, f.keys), a2 = P.parseAnswer(b2, m.sid);
-  const mk = m.finish(a2.Yb);
-  ok(C.tagsEqual(a2.tagF, mk.tagF), 'he recognises her (tagF)');
-  const v = P.parseVerdict(P.accept(c1.sid, f.keys), m.sid, mk); ok(v === 'accept', 'he hears her accept');
-  const g = P.parseGift(P.gift(m.sid, mk, { kind: 'text', text: 'meet me by the bromeliad' }), c1.sid, f.keys);
+  const her = new C.Initiator('pickled herring'), b1 = P.look(her), l1 = P.parseLook(b1);
+  ok(b1.length === 41, 'her face carries 41 bytes');
+  const him = C.respond('pickled herring', l1.sid, l1.Ya), b2 = P.tap(l1.sid, him.Yb), t2 = P.parseTap(b2, her.sid);
+  const hk = her.finish(t2.Yb), mk = him.keys;
+  ok(C.tagsEqual(hk.tagM, mk.tagM) && C.tagsEqual(hk.seed, mk.seed), 'after his tap both hold the same song and the same female');
+  ok(P.parseVerdict(P.accept(her.sid, hk), l1.sid, mk) === 'accept', 'he hears her accept, with her pheromone');
+  const g = P.parseGift(P.gift(l1.sid, mk, { kind: 'text', text: 'meet me by the bromeliad' }), her.sid, hk);
   ok(g && g.text === 'meet me by the bromeliad', 'the gift arrives sealed and opens');
-  const bad = P.gift(m.sid, mk, { kind: 'text', text: 'x' }); bad[40] ^= 1; ok(P.parseGift(bad, c1.sid, f.keys) === null, 'a tampered gift is refused');
-  for (const [name, bytes] of [['court', b1], ['answer', b2]]) {
+  const bad = P.gift(l1.sid, mk, { kind: 'text', text: 'x' }); bad[40] ^= 1; ok(P.parseGift(bad, her.sid, hk) === null, 'a tampered gift is refused');
+  const stranger = C.respond('pickled hering', l1.sid, l1.Ya), sk = her.finish(stranger.Yb);
+  ok(P.parseVerdict(P.accept(her.sid, sk), l1.sid, stranger.keys) === 'wrongkind', 'with another passphrase her pheromone tastes wrong');
+  const c1 = { sid: l1.sid };
+  for (const [name, bytes] of [['tap', b2], ['accept', P.accept(her.sid, hk)]]) {
     const x = Mo.synthesize(bytes, 0, 'quick', { fs: 48000, version: P.VERSION }), ev = Mo.decodeBuffer(x, 48000);
     ok(ev.length === 1 && ev[0].ok && ev[0].version === P.VERSION && C.tagsEqual(ev[0].bytes, bytes), `${name} through the modem (${Mo.frameSeconds(bytes.length, 'quick').toFixed(1)} s)`);
   }
@@ -58,6 +62,6 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
 
 export { ok, S, C };
 if (process.argv[2] !== '--lib') {
-  try { const extra = await import('./test-female.mjs'); await extra.run(ok, S); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e; }
+  for (const f of ['./test-flycode.mjs', './test-female.mjs', './test-e2e.mjs']) { const extra = await import(f); await extra.run(ok, S); }
   console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);
 }

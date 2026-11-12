@@ -79,7 +79,7 @@ export class Listener {
       }
       if (!this.verdict) { if (this.cur === 'match') this.R += P.KD * d; else if (fr.hum || this.cur === 'anchor') this.R += P.KH * d; }
       const st = { n: fr.n, t: fr.n * 0.005, drive: d, R: this.R, matched: this.matched, wrong: this.wrong, cur: this.cur, hum: fr.hum, pulses: fr.pulses, verdict: this.verdict };
-      out.push(st); this.last = st;
+      out.push(st); this.last = st; if (this.onFrame) this.onFrame(st, this.brain);
       if (this.verdict) this.done = true;
     }
     if (final || (this.framer.n * M.dtTicks >= sch.end)) { this.done = true; if (!this.verdict && this.last) this.verdict = decide(this.last, P); if (this.last) this.last.verdict = this.verdict; }
@@ -158,7 +158,7 @@ export class SongDetector {
     const ipiMs = this.M.song.ipiTicks.map(k => k * this.M.song.tick), syms = [];
     for (let i = 1; i < c.length; i++) { const d = c[i] - c[i - 1]; let best = 0; for (let s = 1; s < 4; s++) if (Math.abs(d - ipiMs[s]) < Math.abs(d - ipiMs[best])) best = s; syms.push(best); }
     while (syms.length < PER_TRAIN) syms.push(0); syms.length = PER_TRAIN;
-    this.trains.push(syms);
+    this.trains.push(syms); if (this.onTrain) this.onTrain(syms, this.trains.length);
     if (this.trains.length === TRAINS) { const symbols = this.trains.flat(); const tr = this.trains; this.trains = []; this.onSong({ symbols, trains: tr }); }
   }
   flush() { if (this.cur.length) this._endTrain(); }
