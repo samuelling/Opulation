@@ -147,7 +147,7 @@ async function maleFlow(pass, giftText, r) {
     const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
     await playFrame(g, (t) => air(`passing the note by sound ${Math.round(100 * Math.min(1, t / dur))}%`));
   }
-  nestStatus('No direct link opened between the phones (are they on networks that can reach each other?). ' + (giftText ? 'Your note went by sound.' : ''), false);
+  resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones (are they on networks that can reach each other?).' + (giftText ? ' Your note went by sound.' : '')); if (giftText) addItem({ dir: 'out', kind: 'note', text: giftText }); nestStatus('by sound only', false);
   caption('Mated, but the nest would not open.'); air('mated');
 }
 /** his camera, until he has read her face */
@@ -227,7 +227,7 @@ async function femaleFlow(pass, r) {
     if (!alive(r)) return;
     if (!got) { caption('He went quiet.'); continue; }
     memory.mated(her.sid);
-    if (got.gift) { resetNest(); $('nest').hidden = false; addItem({ dir: 'in', kind: 'note', text: got.gift.text }); nestStatus('His note came by sound; no direct link.', false); caption('Mated. His note is hers.'); scene.mating = 1; air('mated'); return; }
+    if (got.gift) { resetNest(); $('nest').hidden = false; sys('No direct link opened, so his note came by sound.'); addItem({ dir: 'in', kind: 'note', text: got.gift.text }); nestStatus('by sound only', false); caption('Mated. His note is hers.'); scene.mating = 1; air('mated'); return; }
     let link = null;
     try { link = await Link.answer(got.offer); } catch (e) { console.warn(e); }
     if (link) {
@@ -236,46 +236,55 @@ async function femaleFlow(pass, r) {
       if (dc && await Link.open(dc)) { scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); return; }
     }
     // the link failed: he may still send a note by sound
-    nestStatus('No direct link opened between the phones. Listening for a note by sound…', false); $('nest').hidden = false;
+    resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones. Listening for a note by sound…'); nestStatus('by sound only', false);
     const g = await waitFrame((b) => P.parseGift(b, her.sid, keys), 30000);
     if (g) addItem({ dir: 'in', kind: 'note', text: g.text });
     caption('Mated.'); air('mated'); return;
   }
 }
 
-// ---------------------------------------------------------------- the nest: files and photos, once mated
+// ---------------------------------------------------------------- the nest: a temporary chat, with photo and file drops
+// Nothing is stored: the thread lives only in this page. When either phone leaves, the session is over.
 let nest = null; const rows = new Map();
-function nestStatus(t, ok = true) { $('nestStatus').textContent = t; $('nestStatus').style.color = ok ? '' : 'var(--rose)'; }
-function resetNest() { $('nest').hidden = true; $('nestSend').hidden = true; $('items').innerHTML = ''; rows.clear(); nestStatus(''); }
+const hhmm = () => new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function nestStatus(t, ok = true) { $('nestStatus').textContent = t; $('nestDot').classList.toggle('off', !ok); }
+function resetNest() { $('nest').hidden = true; $('nestSend').hidden = true; $('nestSend').classList.remove('off'); $('items').innerHTML = ''; rows.clear(); nestStatus(''); $('nestTitle').textContent = 'Just the two of you'; }
 function closeNest() { try { nest && nest.dc.close(); } catch (e) {} nest = null; resetNest(); }
+function sys(t) { const li = document.createElement('li'); li.className = 'sys'; li.textContent = t; $('items').append(li); scrollThread(); }
+function scrollThread() { const th = $('items'); th.scrollTop = th.scrollHeight; }
 function openNest(dc, firstNote) {
   resetNest(); $('nest').hidden = false; $('nestSend').hidden = false;
-  nestStatus('Direct and encrypted (DTLS keys exchanged inside the courtship). Stay close; leave the page open until it arrives.');
+  nestStatus('session open · direct, encrypted, kept nowhere');
+  sys('She accepted. This lasts as long as you both do.');
   nest = new Link.Nest(dc, { onItem: (it) => addItem(it), onProgress: (p) => progress(p) });
-  dc.addEventListener('close', () => nestStatus('The nest closed.', false));
+  dc.addEventListener('close', () => { nest = null; $('nestSend').classList.add('off'); $('nestTitle').textContent = 'All finished'; nestStatus('spent · nothing kept', false);
+    sys('…and that\'s that. You\'re both finished; nothing was kept. Save anything you want before you slip away.'); });
   if (firstNote) sendItem(firstNote, 'note');
+  $('nest').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-async function sendItem(x, kind) { if (!nest) return; const it = await nest.send(x, kind); addItem(it, true); }
+async function sendItem(x, kind) { if (!nest) return; const it = await nest.send(x, kind); addItem(it); }
 $('pickPhoto').onchange = (e) => { for (const f of e.target.files) sendItem(f, 'photo'); e.target.value = ''; };
 $('pickFile').onchange = (e) => { for (const f of e.target.files) sendItem(f, 'file'); e.target.value = ''; };
-$('noteSend').onclick = () => { const t = $('noteIn').value.trim(); if (t) { sendItem(t, 'note'); $('noteIn').value = ''; } };
+$('noteSend').onclick = () => { const t = $('noteIn').value.trim(); if (t) { sendItem(t, 'note'); $('noteIn').value = ''; $('noteIn').focus(); } };
 $('noteIn').onkeydown = (e) => { if (e.key === 'Enter') $('noteSend').click(); };
 const human = (n) => n < 1024 ? n + ' B' : n < 1 << 20 ? (n / 1024).toFixed(0) + ' kB' : (n / (1 << 20)).toFixed(1) + ' MB';
-function progress(p) {
-  const key = p.dir + p.id; let li = rows.get(key);
-  if (!li) { li = document.createElement('li'); li.className = p.dir; li.innerHTML = `<div class="meta"><span>${p.dir === 'in' ? 'arriving' : 'sending'}: ${esc(p.name)}</span><span></span></div><progress max="1"></progress>`; $('items').prepend(li); rows.set(key, li); }
-  li.querySelector('progress').value = p.frac; li.querySelector('.meta span:last-child').textContent = Math.round(100 * p.frac) + '%';
-}
 const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-async function addItem(it, mine = false) {
-  // replace the progress row for this item if there is one
-  let li = null; for (const [k, v] of rows) if (k.startsWith(it.dir) && v.querySelector('.meta span').textContent.endsWith(it.name)) { li = v; rows.delete(k); break; }
-  if (!li) { li = document.createElement('li'); $('items').prepend(li); }
-  li.className = it.dir; const who = it.dir === 'in' ? 'from your mate' : 'sent';
-  if (it.kind === 'note') { const text = it.text ?? await it.blob.text(); li.innerHTML = `<div class="meta"><span>note · ${who}</span></div><div class="note">${esc(text)}</div>`; return; }
+const ext = (n) => ((n || '').split('.').pop() || 'file').slice(0, 4);
+function row(dir, id) { const key = dir + id; let li = rows.get(key); if (!li) { li = document.createElement('li'); li.className = dir; $('items').append(li); rows.set(key, li); scrollThread(); } return li; }
+function progress(p) {
+  if (p.kind === 'note') return;                         // notes are small; they just appear
+  const li = row(p.dir, p.id);
+  if (!li.querySelector('progress')) li.innerHTML = `<div class="drop"><div class="file"><span class="ico">${esc(ext(p.name))}</span><div><div class="fn">${esc(p.name)}</div><div class="fs">${human(p.size || 0)} · ${p.dir === 'in' ? 'arriving' : 'sending'}</div></div></div><progress max="1"></progress></div>`;
+  li.querySelector('progress').value = p.frac;
+}
+async function addItem(it) {
+  const li = it.id != null ? row(it.dir, it.id) : row(it.dir, 'x' + Math.random()), when = `<div class="when">${hhmm()}</div>`;
+  if (it.kind === 'note') { const text = it.text ?? await it.blob.text(); li.innerHTML = `<div class="bub">${esc(text)}</div>${when}`; scrollThread(); return; }
   const url = URL.createObjectURL(it.blob), isImg = (it.type || '').startsWith('image/');
-  li.innerHTML = `<div class="meta"><span>${isImg ? 'photo' : 'file'} · ${who}</span><span>${human(it.size)}</span></div>` +
-    (isImg ? `<img src="${url}" alt="${esc(it.name)}">` : '') + `<a href="${url}" download="${esc(it.name)}">${esc(it.name)}</a>`;
+  li.innerHTML = `<div class="drop">` + (isImg ? `<img src="${url}" alt="${esc(it.name)}">` :
+    `<div class="file"><span class="ico">${esc(ext(it.name))}</span><div><div class="fn">${esc(it.name)}</div><div class="fs">${human(it.size)}</div></div></div>`) +
+    `<a href="${url}" download="${esc(it.name)}">${it.dir === 'in' ? 'save' : 'sent'} ${isImg ? 'photo' : 'file'}</a></div>${when}`;
+  scrollThread();
 }
 
 /** listen to the song as it arrives; her brain runs train by train and replays in real time just behind it */
@@ -443,3 +452,6 @@ function drawFlies() {
 }
 function loop() { if (!$('ritual').hidden) { drawFlies(); drawOsc(); idleMale(); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
+
+// for tools/nest-shot (headless checks of the chat window): ?test exposes the nest
+if (new URLSearchParams(location.search).has('test')) window.__opul = { openNest, Link, sendItem };

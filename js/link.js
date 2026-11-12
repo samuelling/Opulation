@@ -90,11 +90,11 @@ export class Nest {
     if (typeof d === 'string') {
       const h = JSON.parse(d);
       if (h.end && this.rx && this.rx.id === h.id) { const r = this.rx; this.rx = null; const blob = new Blob(r.parts, { type: r.type || 'application/octet-stream' });
-        this.onItem({ dir: 'in', kind: r.kind, name: r.name, type: r.type, size: r.size, blob }); }
-      else if (!h.end) { this.rx = { ...h, parts: [], got: 0 }; this.onProgress({ dir: 'in', id: h.id, name: h.name, frac: 0 }); }
+        this.onItem({ dir: 'in', id: r.id, kind: r.kind, name: r.name, type: r.type, size: r.size, blob }); }
+      else if (!h.end) { this.rx = { ...h, parts: [], got: 0 }; this.onProgress({ dir: 'in', id: h.id, kind: h.kind, name: h.name, size: h.size, frac: 0 }); }
       return;
     }
-    if (!this.rx) return; this.rx.parts.push(d); this.rx.got += d.byteLength; this.onProgress({ dir: 'in', id: this.rx.id, name: this.rx.name, frac: this.rx.got / Math.max(1, this.rx.size) });
+    if (!this.rx) return; this.rx.parts.push(d); this.rx.got += d.byteLength; this.onProgress({ dir: 'in', id: this.rx.id, kind: this.rx.kind, name: this.rx.name, size: this.rx.size, frac: this.rx.got / Math.max(1, this.rx.size) });
   }
   /** send a File/Blob (kind 'file' or 'photo') or a note (string) */
   send(item, kind = 'file') { this.q = this.q.then(() => this._send(item, kind)); return this.q; }
@@ -106,10 +106,9 @@ export class Nest {
     this.dc.bufferedAmountLowThreshold = 1 << 20;
     for (let o = 0; o < buf.length; o += CHUNK) {
       if (this.dc.bufferedAmount > 4 << 20) await new Promise(r => this.dc.addEventListener('bufferedamountlow', r, { once: true }));
-      this.dc.send(buf.subarray(o, Math.min(buf.length, o + CHUNK))); this.onProgress({ dir: 'out', id, name, frac: Math.min(1, (o + CHUNK) / buf.length) });
+      this.dc.send(buf.subarray(o, Math.min(buf.length, o + CHUNK))); this.onProgress({ dir: 'out', id, kind: isNote ? 'note' : kind, name, size: blob.size, frac: Math.min(1, (o + CHUNK) / buf.length) });
     }
     this.dc.send(JSON.stringify({ id, end: true }));
-    this.onProgress({ dir: 'out', id, name, frac: 1 });
-    return { dir: 'out', kind: isNote ? 'note' : kind, name, type, size: blob.size, blob };
+    return { dir: 'out', id, kind: isNote ? 'note' : kind, name, type, size: blob.size, blob };
   }
 }
