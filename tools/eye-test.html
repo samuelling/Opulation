@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>eye test</title><canvas id="c" width="960" height="270"></canvas>
+<script type="module">
+// His optic lobe on a synthetic view: a pale head with two dark eyes drifting right.
+import { FlyEye } from '../js/eye.js';
+const t0 = performance.now(), e = new FlyEye();
+try { await e.ready; console.log('ready in ' + Math.round(performance.now() - t0) + ' ms, columns ' + e.nC);
+  const w = 160, h = 120, img = new Uint8ClampedArray(w * h * 4); let L = null;
+  for (let k = 0; k < 15; k++) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = 4 * (y * w + x), cx = 80 + k * 1.5; let v = 60;
+      if ((x - cx) ** 2 / 1600 + (y - 60) ** 2 / 900 < 1) v = 220; if ((x - cx + 18) ** 2 + (y - 60) ** 2 < 150 || (x - cx - 18) ** 2 + (y - 60) ** 2 < 150) v = 40; img[o] = img[o + 1] = img[o + 2] = v; img[o + 3] = 255; }
+    e.sample(img, w, h); L = await e.step(2);
+  }
+  e.draw(document.getElementById('c'), L);
+  console.log('RESULT ' + (L && L.mo.some(v => v > 0) && L.on.some(v => v !== 0) ? 'PASS' : 'FAIL') + ' lc10 ' + L.lc10.toFixed(4) + ' in ' + Math.round(performance.now() - t0) + ' ms');
+} catch (err) { console.log('RESULT FAIL ' + (err.message || err)); }
+</script>

@@ -6,10 +6,12 @@
 //     (von Philipsborn et al. 2011; Clemens et al. 2018);
 //   in the ventral nerve cord, dPR1 and vPR6 pattern pulse song, TN1A drives sine song (Shirangi et al. 2016;
 //     Lillvis et al. 2024, MANC), and the wing motor neurons sing.
+// While he looks at her, LC10a is driven by his optic lobe (js/eye.js, FlyHarp's flyvis model): a stand-in read
+// from the OFF and motion activity in the front of his eye, since LC10a itself lies beyond that model.
 // The song itself is decided by the key (js/song.js); this circuit shows how a male would produce it.
 // Floating point is fine here: nothing about the handshake depends on these numbers.
 export const NODES = [
-  { id: 'LC10a', label: 'LC10a', area: 'optic lobe', role: 'sees her move' },
+  { id: 'LC10a', label: 'LC10a', area: 'optic lobe', role: 'sees her' },
   { id: 'vAB3', label: 'ppk23→vAB3', area: 'foreleg', role: 'tastes her (7,11-HD)' },
   { id: 'P1', label: 'P1', area: 'protocerebrum', role: 'decides to court' },
   { id: 'pIP10', label: 'pIP10', area: 'descending', role: 'commands song' },

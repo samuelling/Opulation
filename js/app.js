@@ -7,6 +7,8 @@ import { MaleCircuit, NODES, EDGES } from './male.js';
 import { NoteDecoder, synthesize, frameSeconds } from './modem.js';
 import * as F from './flycode.js';
 import * as Link from './link.js';
+import { FlyEye } from './eye.js';
+let eye = null;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -37,6 +39,7 @@ $('go').onclick = async () => {
   try { await boot; await startAudio(); } catch (e) { $('go').disabled = false; return showSetupMsg(e.message); }
   $('setup').hidden = true; $('ritual').hidden = false; resetNest();
   run = { id: Math.random() };
+  if (role === 'male' && !eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }   // his optic lobe takes ~2 s to wake
   if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
 };
 $('again').onclick = () => { run = null; stopListening(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
@@ -153,13 +156,17 @@ async function lookForHer(r) {
   catch (e) { $('lookCap').textContent = 'He needs the camera to see her (' + e.message + ').'; return null; }
   const v = $('video'); v.srcObject = stream; await v.play().catch(() => {});
   const view = $('camView'), g = view.getContext('2d'), work = document.createElement('canvas'), wg = work.getContext('2d', { willReadFrequently: true });
-  let found = null, best = 0;
-  while (alive(r) && !found) {
+  let found = null, best = 0, lcMax = 1e-3, until = Infinity, eyeFirst = 0;
+  // once he has read her, keep looking a moment longer so his own eye has time to see her too
+  while (alive(r) && (performance.now() < until || (found && !eyeFirst && performance.now() < until + 5000) || (eyeFirst && performance.now() < eyeFirst + 1500))) {
     await sleep(90);
     const vw = v.videoWidth, vh = v.videoHeight; if (!vw) continue;
     const w = 640, h = Math.round(640 * vh / vw); work.width = w; work.height = h; view.width = w; view.height = h;
     wg.drawImage(v, 0, 0, w, h); const rgba = wg.getImageData(0, 0, w, h).data;
     g.drawImage(work, 0, 0); g.fillStyle = 'rgba(18,11,23,.35)'; g.fillRect(0, 0, w, h);
+    // his optic lobe looks too (FlyHarp's model), at a fly's resolution
+    if (!eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }
+    if (eye.meta && !eye._wait) { eye.sample(rgba, w, h); eye.step(2).then((Lz) => { if (!Lz) return; eye.draw($('flyEye'), Lz); if (found && !eyeFirst) eyeFirst = performance.now(); lcMax = Math.max(lcMax * 0.995, Lz.lc10, 1e-3); scene.sees = Math.min(1, Lz.lc10 / lcMax); }); }
     const res = F.read(F.toGrey(rgba, w, h), w, h);
     if (res && res.finders) {
       // show what he sees: each facet he reads lights up
@@ -168,7 +175,8 @@ async function lookForHer(r) {
         g.fillStyle = res.bits[i] ? 'rgba(255,111,145,.9)' : 'rgba(94,230,208,.55)'; g.fillRect(x - 1.5, y - 1.5, 3, 3); }
       g.strokeStyle = '#ffb547'; g.lineWidth = 2; for (const b of res.finders) { g.beginPath(); g.arc(b.x, b.y, b.r + 4, 0, 7); g.stroke(); }
       const look = P.parseLook(res.payload);
-      if (look) found = look; else { best++; $('lookCap').textContent = 'He glimpses her… hold steady, fill the frame with her face.'; }
+      if (look && !found) { found = look; until = performance.now() + 2200; $('lookCap').textContent = 'He sees her. Her eyes gave him her half of the key; his own eye (below) sees her as a fly would.'; }
+      else if (!look && !found) { best++; $('lookCap').textContent = 'He glimpses her… hold steady, fill the frame with her face.'; }
     }
   }
   stream.getTracks().forEach(t => t.stop());

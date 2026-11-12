@@ -22,6 +22,7 @@ After a rejection she won't show herself for a while (10 s, doubling up to 10 mi
 - **Opulation runs it in integers** (Q16 fixed point, `js/female.js`). Every constant that needs floating point is frozen in `data/female-model.json` by `tools/make-model.mjs`, so two phones, or Swift and JavaScript, compute the same brain bit for bit (`data/vectors.json`).
 - **She is individual.** Each neuron's gain varies by up to ±12.5%, drawn from a seed that both phones derive from the session key. So both phones hold the same female only when the passphrases match. His phone runs her too, and shows what she should be feeling while he sings.
 - **Her receptivity** reads the mean activity of the 32 cells in the AVLP, PVLP and wedge that respond most to pulse song. vpoEN, the AVLP neuron that responds to song and drives vaginal plate opening in real flies, is in the network and marked. In this untrained model it barely responds, so it is shown but not used.
+- **His eye** is FlyHarp's optic lobe: the flyvis connectome-constrained model (Lappalainen et al. 2024; 45,669 neurons, 65 cell types, 721 ommatidia), run in a worker (`js/fly/`, copied from FlyHarp). While his camera reads her face, the same view is sampled onto his 721 facets and drawn as four lenses: photoreceptors, ON (Mi1, Tm3), OFF (Tm1, 2, 4, 9) and T4/T5 motion. His eye resolves about 5° per facet, so the phone camera does the actual reading; his optic lobe shows what a fly makes of the same view. Its frontal OFF and motion activity drives LC10a in his courtship circuit, standing in for the real LC10a, which lies beyond the model.
 - **His circuit** is a schematic from the literature, not a connectome. FlyWire is a female brain and has no male song circuits. It has LC10a and ppk23→vAB3 feeding P1, P1 gating pIP10, and pIP10 driving dPR1, vPR6 (pulse) and TN1A (sine). The male nerve cord connectome (MANC) holds the real song circuit; swapping it in is future work.
 
 ## Security, honestly
@@ -42,6 +43,7 @@ js/link.js      the nest: compact WebRTC offers/answers (~90 bytes) and file/pho
 js/song.js      the song: tag <-> intervals, the ideal antenna frames, her listener, on-air render, pulse detector
 js/female.js    the FlyWire auditory network in Q16 integers, with a seeded personality
 js/male.js      his schematic courtship circuit
+js/eye.js       his optic lobe (FlyHarp's flyvis model in js/fly/), fed by the camera
 js/modem.js     Screech's modem (copy; accepts frame version 5)
 js/app.js       the page
 data/           ear.json + ear.bin (from FlyHarp), female-model.json, vectors.json
@@ -57,6 +59,6 @@ tools/          make-model.mjs, test*.mjs (npm install; npm test)
 - the song through simulated echo
 - a full two-phone ritual through camera and room.
 
-`tools/rtc-test.html` connects two WebRTC peers using only the compact blobs and moves a 3 MB file (open it from a local server).
+`tools/eye-test.html` runs his optic lobe on a synthetic view. `tools/rtc-test.html` connects two WebRTC peers using only the compact blobs and moves a 3 MB file (open it from a local server).
 
 **iPhone:** to come, as a native Swift app that works with the web version. libsodium (swift-sodium) gives the same CPace. The female port must reproduce `data/vectors.json`.
