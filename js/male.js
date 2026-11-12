@@ -12,13 +12,13 @@
 // Floating point is fine here: nothing about the handshake depends on these numbers.
 export const NODES = [
   { id: 'LC10a', label: 'LC10a', area: 'optic lobe', role: 'sees her' },
-  { id: 'vAB3', label: 'ppk23→vAB3', area: 'foreleg', role: 'tastes her (7,11-HD)' },
+  { id: 'vAB3', label: 'ppk23→vAB3', area: 'foreleg', role: 'tastes her' },
   { id: 'P1', label: 'P1', area: 'protocerebrum', role: 'decides to court' },
   { id: 'pIP10', label: 'pIP10', area: 'descending', role: 'commands song' },
   { id: 'dPR1', label: 'dPR1', area: 'VNC', role: 'pulse pattern' },
   { id: 'vPR6', label: 'vPR6', area: 'VNC', role: 'pulse timing' },
   { id: 'TN1A', label: 'TN1A', area: 'VNC', role: 'sine song' },
-  { id: 'wing', label: 'wing motor', area: 'VNC', role: 'vibrates one wing' },
+  { id: 'wing', label: 'wing', area: 'VNC', role: 'sings' },
 ];
 export const EDGES = [['LC10a', 'P1'], ['vAB3', 'P1'], ['P1', 'pIP10'], ['pIP10', 'dPR1'], ['pIP10', 'vPR6'], ['pIP10', 'TN1A'], ['dPR1', 'wing'], ['vPR6', 'wing'], ['TN1A', 'wing']];
 

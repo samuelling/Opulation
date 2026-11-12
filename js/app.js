@@ -116,7 +116,9 @@ async function maleFlow(pass, giftText, r) {
     await playFrame(P.tap(seen.sid, him.Yb)); scene.tastes = 0.3; await sleep(500);
     stage('sing'); caption('He extends one wing and sings: sine song, then pulse song. The song is his key, proven.');
     air('singing (3.7 s)…'); resetNotes(); oscSet(Song.renderTrue(sch, M, 4000), 4000);
-    await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005)); if (k >= 0) showFemale(snaps[k].st, snaps[k].r, true); });
+    let shown = -1;
+    await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005));
+      while (shown < k) { shown++; showFemale(snaps[shown].st, snaps[shown].r, true, shown < k); } });
     scene.songT = -1; stage('decide'); caption('She decides.'); air('waiting for her…');
     verdict = await waitFrame((b) => P.parseVerdict(b, seen.sid, keys), 9000);
   }
@@ -172,7 +174,7 @@ async function lookForHer(r) {
       // show what he sees: each facet he reads lights up
       const Lc = F.layout().cells;
       for (let i = 0; i < Lc.length; i++) { const z = res.Hm[6] * Lc[i].x + res.Hm[7] * Lc[i].y + res.Hm[8], x = (res.Hm[0] * Lc[i].x + res.Hm[1] * Lc[i].y + res.Hm[2]) / z, y = (res.Hm[3] * Lc[i].x + res.Hm[4] * Lc[i].y + res.Hm[5]) / z;
-        g.fillStyle = res.bits[i] ? 'rgba(255,111,145,.9)' : 'rgba(94,230,208,.55)'; g.fillRect(x - 1.5, y - 1.5, 3, 3); }
+        g.fillStyle = res.bits[i] ? 'rgba(255,104,186,.95)' : 'rgba(255,210,63,.55)'; g.fillRect(x - 1.5, y - 1.5, 3, 3); }
       g.strokeStyle = '#ffb547'; g.lineWidth = 2; for (const b of res.finders) { g.beginPath(); g.arc(b.x, b.y, b.r + 4, 0, 7); g.stroke(); }
       const look = P.parseLook(res.payload);
       if (look && !found) { found = look; until = performance.now() + 2200; $('lookCap').textContent = 'He sees her. Her eyes gave him her half of the key; his own eye (below) sees her as a fly would.'; }
@@ -281,7 +283,7 @@ function hearSong(L, queue, expected, r) {
   return new Promise((res) => {
     const heard = []; let finished = false, start = 0, k = 0;
     const finish = () => { if (finished) return; finished = true; L.advance(heard.slice(), true); };
-    const det = new Song.SongDetector(M, ctx.sampleRate, () => {}, () => { scene.pulseFlash = performance.now(); if (!start) start = performance.now() + 800; });
+    const det = new Song.SongDetector(M, ctx.sampleRate, () => {}, () => { scene.pulseFlash = performance.now(); ring(); if (!start) start = performance.now() + 800; });
     det.onTrain = (syms, n) => { heard.push(...syms); if (n >= Song.TRAINS) finish(); else L.advance(heard.slice(), false); };
     const l = (x) => det.push(x); listeners.add(l);
     const giveUp = setTimeout(() => { det.flush(); finish(); }, 16000);
@@ -298,6 +300,8 @@ function hearSong(L, queue, expected, r) {
 
 // ---------------------------------------------------------------- her brain on screen
 let pos = null, areaIdx = null, readSet = null, vpo = [];
+// FlyHarp's area palette: ears teal, AMMC/saddle violet, wedge yellow, AVLP red, GNG orange; the song readout hot pink
+const NPCOL = { JO: '79,179,164', AMMC: '143,127,214', SAD: '143,127,214', WED: '224,195,90', AVLP: '226,87,107', PVLP: '226,87,107', GNG: '232,138,79', IPS: '232,138,79', SPS: '232,138,79' };
 const AREAS = [['JO', ['JO']], ['AMMC', ['AMMC']], ['SAD', ['SAD']], ['WED', ['WED']], ['AVLP', ['AVLP', 'PVLP']], ['GNG', ['GNG']], ['IPS', ['IPS', 'SPS']]];
 function prepNet() {
   const c = $('fNet'), W = c.width, H = c.height; let x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18;
@@ -308,78 +312,88 @@ function prepNet() {
   readSet = new Set(M.readout); vpo = M.named.vpoEN || [];
   $('fAreas').innerHTML = AREAS.map(([n]) => `<div class="area"><i><b style="height:0"></b></i>${n}</div>`).join('');
   const bar = $('notes'); bar.innerHTML = '<span></span>'.repeat(64);
-  $('rTheta').style.left = '60%';
+  $('rTheta').style.left = '40%';
   drawNet(new Uint8Array(meta.n)); drawMale();
 }
 function snapR(b) { const a = new Uint8Array(b.N); for (let i = 0; i < b.N; i++) a[i] = Math.min(255, b.r[i] >> 8); return a; }
 function resetNotes() { for (const s of $('notes').children) s.className = ''; $('rBar').style.width = '0'; $('rVal').textContent = ''; }
-function showFemale(st, r, predicted) {
+function showFemale(st, r, predicted, skipDraw = false) {
+  for (const p of st.pulses) if (p.k >= 0) $('notes').children[p.k].className = st.cur === 'match' ? 'm' : 'w';
+  if (skipDraw) return;
   drawNet(r);
   const bars = $('fAreas').querySelectorAll('b');
   areaIdx.forEach((ids, k) => { let s = 0; for (const i of ids) s += r[i]; const m = ids.length ? s / ids.length / 255 : 0; bars[k].style.height = Math.min(100, 100 * Math.sqrt(m * 4)) + '%'; });
-  const full = Song.LISTEN.THETA / 0.6; $('rBar').style.width = Math.min(100, 100 * st.R / full) + '%';
+  const full = Song.LISTEN.THETA * 2.5;   // the threshold mark sits at 40%
+  $('rBar').style.width = Math.min(100, 100 * st.R / full) + '%';
   $('rVal').textContent = st.verdict ? (st.verdict === 'accept' ? 'accepts' : 'rejects') : `${st.matched} right · ${st.wrong} wrong${predicted ? ' (predicted)' : ''}`;
-  for (const p of st.pulses) if (p.k >= 0) $('notes').children[p.k].className = st.cur === 'match' ? 'm' : 'w';
 }
 function drawNet(r) {
-  const c = $('fNet'), g = c.getContext('2d'); g.globalCompositeOperation = 'source-over'; g.fillStyle = '#0b070e'; g.fillRect(0, 0, c.width, c.height);
+  const c = $('fNet'), g = c.getContext('2d'); g.globalCompositeOperation = 'source-over'; g.fillStyle = '#12040c'; g.fillRect(0, 0, c.width, c.height);
   g.globalCompositeOperation = 'lighter';
   for (let i = 0; i < meta.n; i++) {
     const a = r[i] / 255, x = pos[2 * i], y = pos[2 * i + 1];
-    if (a < 0.01) { g.fillStyle = 'rgba(120,90,130,0.10)'; g.fillRect(x, y, 1.6, 1.6); continue; }
-    const jo = i < meta.tiers[0], col = jo ? '94,230,208' : readSet.has(i) ? '255,111,145' : '255,181,71';
+    if (a < 0.01) { g.fillStyle = 'rgba(200,120,160,0.10)'; g.fillRect(x, y, 1.6, 1.6); continue; }
+    const col = readSet.has(i) ? '255,104,186' : NPCOL[meta.np[i]] || '231,165,143';
     g.fillStyle = `rgba(${col},${Math.min(1, 0.25 + a * 1.5)})`; const s = 1.6 + a * 4; g.fillRect(x - s / 2, y - s / 2, s, s);
   }
   g.globalCompositeOperation = 'source-over';
-  for (const i of vpo) { g.strokeStyle = 'rgba(239,228,210,0.8)'; g.beginPath(); g.arc(pos[2 * i], pos[2 * i + 1], 6 + r[i] / 40, 0, 7); g.stroke(); }
-  if (vpo.length) { g.fillStyle = '#efe4d2'; g.font = '20px -apple-system, sans-serif'; g.fillText('vpoEN', pos[2 * vpo[0]] + 9, pos[2 * vpo[0]] - 6); }
-  g.font = '18px -apple-system, sans-serif'; g.fillStyle = 'rgba(94,230,208,.9)'; g.fillText('■ ears (Johnston\'s organ)', 12, c.height - 12); g.fillStyle = 'rgba(255,111,145,.9)'; g.textAlign = 'right'; g.fillText('■ song pathway → vpoEN', c.width - 12, c.height - 12); g.textAlign = 'left';
+  for (const i of vpo) { g.strokeStyle = 'rgba(255,210,63,0.85)'; g.beginPath(); g.arc(pos[2 * i], pos[2 * i + 1], 6 + r[i] / 40, 0, 7); g.stroke(); }
+  if (vpo.length) { g.fillStyle = '#FFD23F'; g.font = 'italic 22px "Playfair Display", serif'; g.fillText('vpoEN', pos[2 * vpo[0]] + 9, pos[2 * vpo[0]] - 6); }
+  g.font = '18px "Courier Prime", monospace'; g.fillStyle = 'rgba(79,179,164,.95)'; g.fillText('■ ears (Johnston\'s organ)', 12, c.height - 12); g.fillStyle = 'rgba(255,104,186,.95)'; g.textAlign = 'right'; g.fillText('■ song pathway → vpoEN', c.width - 12, c.height - 12); g.textAlign = 'left';
 }
 
 // ---------------------------------------------------------------- his circuit on screen
 const circuit = new MaleCircuit(); let lastT = 0, pulseIdx = 0;
-const NPOS = { LC10a: [0.1, 0.25], vAB3: [0.1, 0.72], P1: [0.32, 0.48], pIP10: [0.52, 0.48], dPR1: [0.72, 0.22], vPR6: [0.72, 0.48], TN1A: [0.72, 0.76], wing: [0.92, 0.48] };
+const NPOS = { LC10a: [0.13, 0.2], vAB3: [0.13, 0.66], P1: [0.33, 0.43], pIP10: [0.53, 0.43], dPR1: [0.73, 0.12], vPR6: [0.73, 0.43], TN1A: [0.73, 0.74], wing: [0.9, 0.43] };
 function driveMale(sch, t) {
   if (t < lastT) { lastT = 0; pulseIdx = 0; }
   const dt = Math.max(0.001, t - lastT); lastT = t;
   const tick = t / M.song.tick; let pulse = false;
   while (pulseIdx < sch.pulses.length && sch.pulses[pulseIdx].t <= tick) { pulse = true; pulseIdx++; }
+  if (pulse) ring();
   const hum = sch.hums.some(h => tick >= h.t0 && tick < h.t1);
   circuit.step(dt, { sees: scene.sees, tastes: scene.tastes, singing: true, pulse, hum }); scene.wing = circuit.a.wing; drawMale();
 }
 function idleMale() { if (scene.songT >= 0) return; circuit.step(1 / 60, { sees: scene.sees, tastes: scene.tastes }); scene.wing = circuit.a.wing; drawMale(); }
 function drawMale() {
-  const c = $('mNet'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#0b070e'; g.fillRect(0, 0, W, H);
+  const c = $('mNet'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#12040c'; g.fillRect(0, 0, W, H);
   const P = (id) => [NPOS[id][0] * W, NPOS[id][1] * H];
-  for (const [a, b] of EDGES) { const [x0, y0] = P(a), [x1, y1] = P(b), act = circuit.a[a]; g.strokeStyle = `rgba(255,181,71,${0.15 + 0.7 * act})`; g.lineWidth = 1 + 3 * act; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+  for (const [a, b] of EDGES) { const [x0, y0] = P(a), [x1, y1] = P(b), act = circuit.a[a]; g.strokeStyle = `rgba(255,210,63,${0.15 + 0.7 * act})`; g.lineWidth = 1 + 3 * act; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
   for (const n of NODES) {
     const [x, y] = P(n.id), a = circuit.a[n.id], rad = 16 + 8 * a;
-    const grd = g.createRadialGradient(x, y, 2, x, y, rad * 2); grd.addColorStop(0, `rgba(255,181,71,${0.2 + 0.8 * a})`); grd.addColorStop(1, 'rgba(255,181,71,0)');
+    const grd = g.createRadialGradient(x, y, 2, x, y, rad * 2); grd.addColorStop(0, `rgba(255,104,186,${0.2 + 0.8 * a})`); grd.addColorStop(1, 'rgba(255,104,186,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(x, y, rad * 2, 0, 7); g.fill();
-    g.fillStyle = '#160e1a'; g.strokeStyle = `rgba(239,228,210,${0.4 + 0.6 * a})`; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill(); g.stroke();
-    g.fillStyle = '#efe4d2'; g.font = '600 20px -apple-system, sans-serif'; g.textAlign = 'center'; g.fillText(n.label, x, y + 40);
-    g.fillStyle = 'rgba(168,154,168,.95)'; g.font = '16px -apple-system, sans-serif'; g.fillText(n.role, x, y + 60);
+    g.fillStyle = '#2a0b1d'; g.strokeStyle = `rgba(243,227,211,${0.4 + 0.6 * a})`; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#f3e3d3'; g.font = '600 20px "Spline Sans", sans-serif'; g.textAlign = 'center'; g.fillText(n.label, x, y + 40);
+    g.fillStyle = 'rgba(185,150,166,.95)'; g.font = '15px "Courier Prime", monospace'; g.fillText(n.role, x, y + 60);
   }
   g.textAlign = 'left';
 }
 let osc = null, oscFs = 4000;
 function oscSet(x, fs) { osc = x; oscFs = fs; }
 function drawOsc() {
-  const c = $('osc'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#0b070e'; g.fillRect(0, 0, W, H);
-  g.strokeStyle = 'rgba(94,230,208,.25)'; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
-  if (!osc || scene.songT < 0) { g.fillStyle = 'rgba(168,154,168,.8)'; g.font = '18px -apple-system, sans-serif'; g.fillText('his song (true pitch) appears here as he sings', 12, H - 14); return; }
+  const c = $('osc'), g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#12040c'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,104,186,.2)'; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+  if (!osc || scene.songT < 0) { g.fillStyle = 'rgba(185,150,166,.85)'; g.font = 'italic 20px "Playfair Display", serif'; g.fillText('his song, at true pitch, appears here as he sings', 12, H - 14); return; }
   const span = 0.5, n0 = Math.floor((scene.songT - span) * oscFs), n1 = Math.floor(scene.songT * oscFs);
-  g.strokeStyle = '#5ee6d0'; g.lineWidth = 1.2; g.beginPath();
+  g.strokeStyle = '#FF68BA'; g.shadowColor = 'rgba(255,104,186,.8)'; g.shadowBlur = 8; g.lineWidth = 1.4; g.beginPath();
   for (let x = 0; x < W; x++) { const n = n0 + Math.floor((n1 - n0) * x / W), v = n >= 0 && n < osc.length ? osc[n] : 0; const y = H / 2 - v * H * 1.3; x ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke();
+  g.stroke(); g.shadowBlur = 0;
 }
+
+// ---------------------------------------------------------------- the mast slips like a copier sheet (as FlyHarp's), and the logo's wing rings with each pulse
+const logoEl = document.querySelector('.logo'), strings = document.querySelector('#logo .strings'), reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let lastJit = 0;
+function jitter() { if (reduced || !logoEl) return; logoEl.classList.remove('jit'); void logoEl.offsetWidth; logoEl.classList.add('jit'); lastJit = performance.now(); }
+function ring() { if (!strings) return; strings.classList.remove('ring'); void strings.getBBox(); strings.classList.add('ring'); if (performance.now() - lastJit > 420 && Math.random() < 0.3) jitter(); }
+(function idle() { setTimeout(() => { if (!document.hidden && performance.now() - lastJit > 3000) jitter(); idle(); }, 3500 + Math.random() * 5500); })();
 
 // ---------------------------------------------------------------- the two flies
 const scene = { stage: 'orient', bad: false, t0: 0, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, pulseFlash: 0 };
 function resetScene() { Object.assign(scene, { stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0 }); resetNotes(); }
 function fly(g, x, y, ang, s, { wing = 0, female = false, legReach = 0, ovi = 0 }) {
   g.save(); g.translate(x, y); g.rotate(ang); g.scale(s, s);
-  g.lineWidth = 2.2 / s; g.strokeStyle = '#efe4d2'; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.lineWidth = 2.2 / s; g.strokeStyle = '#f3e3d3'; g.lineJoin = 'round'; g.lineCap = 'round';
   // legs
   for (const side of [-1, 1]) for (const [lx, a, l] of [[10, -0.7, 22], [0, -1.5, 20], [-10, -2.3, 24]]) {
     let aa = a; if (lx === 10 && side === 1 && legReach) aa = -0.2 - 0.3 * legReach;
@@ -390,24 +404,26 @@ function fly(g, x, y, ang, s, { wing = 0, female = false, legReach = 0, ovi = 0 
   const vib = wing ? Math.sin(performance.now() / 6) * 0.18 * wing : 0;
   for (const side of [-1, 1]) {
     const open = side === -1 ? wing * 1.25 + vib : 0;
-    g.save(); g.rotate(side * (0.18 + open)); g.fillStyle = 'rgba(239,228,210,0.10)'; g.beginPath(); g.ellipse(-26, side * 6, 30, 9, 0, 0, 7); g.fill(); g.stroke(); g.restore();
+    g.save(); g.rotate(side * (0.18 + open)); g.fillStyle = 'rgba(255,104,186,0.12)'; g.beginPath(); g.ellipse(-26, side * 6, 30, 9, 0, 0, 7); g.fill(); g.stroke(); g.restore();
   }
   // abdomen (bands; hers rounder), thorax, head, red eyes
-  g.fillStyle = '#2b1d2e'; g.beginPath(); g.ellipse(-20 - 6 * (female ? 1 : 0), 0, female ? 20 : 16, female ? 12 : 10, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = '#3a0f24'; g.beginPath(); g.ellipse(-20 - 6 * (female ? 1 : 0), 0, female ? 20 : 16, female ? 12 : 10, 0, 0, 7); g.fill(); g.stroke();
   for (let k = 0; k < (female ? 4 : 3); k++) { g.beginPath(); g.moveTo(-14 - k * 7 - (female ? 6 : 0), -8); g.quadraticCurveTo(-17 - k * 7 - (female ? 6 : 0), 0, -14 - k * 7 - (female ? 6 : 0), 8); g.stroke(); }
-  if (!female) { g.fillStyle = '#efe4d2'; g.beginPath(); g.ellipse(-31, 0, 4, 6, 0, 0, 7); g.fill(); }
+  if (!female) { g.fillStyle = '#f3e3d3'; g.beginPath(); g.ellipse(-31, 0, 4, 6, 0, 0, 7); g.fill(); }
   if (female && ovi) { g.beginPath(); g.moveTo(-46, 0); g.lineTo(-46 - 10 * ovi, 0); g.stroke(); }
-  g.fillStyle = '#3a2a3f'; g.beginPath(); g.ellipse(2, 0, 11, 9, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = '#4a1530'; g.beginPath(); g.ellipse(2, 0, 11, 9, 0, 0, 7); g.fill(); g.stroke();
   g.beginPath(); g.ellipse(17, 0, 6, 8, 0, 0, 7); g.fill(); g.stroke();
-  g.fillStyle = '#e2453f'; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(19, sd * 6, 3.6, 4.2, 0, 0, 7); g.fill(); }
+  g.fillStyle = '#ff3d5a'; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(19, sd * 6, 3.6, 4.2, 0, 0, 7); g.fill(); }
   g.restore();
 }
 function drawFlies() {
   const c = $('flies'), g = c.getContext('2d'), W = c.width, H = c.height, now = performance.now(), dt = (now - scene.t0) / 1000;
   g.clearRect(0, 0, W, H);
-  // ground: a leaf, lit from above
-  const grd = g.createRadialGradient(W / 2, H * 0.6, 20, W / 2, H * 0.6, W * 0.6); grd.addColorStop(0, 'rgba(120,160,90,0.18)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
-  g.strokeStyle = 'rgba(160,190,120,0.18)'; g.lineWidth = 1; for (let k = -4; k <= 4; k++) { g.beginPath(); g.moveTo(W / 2, H * 0.62); g.quadraticCurveTo(W / 2 + k * 60, H * 0.4, W / 2 + k * 130, H * (k % 2 ? 0.05 : 0.95)); g.stroke(); }
+  // a velvet bed: pleats in crushed crimson, a pool of low pink light
+  const grd = g.createRadialGradient(W / 2, H * 0.55, 10, W / 2, H * 0.55, W * 0.6); grd.addColorStop(0, 'rgba(255,104,186,0.20)'); grd.addColorStop(0.5, 'rgba(120,20,60,0.12)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  for (let k = 0; k < 9; k++) { const y0 = H * (k + 0.5) / 9, sw = Math.sin(now / 4000 + k) * 10;
+    const pl = g.createLinearGradient(0, y0 - 18, 0, y0 + 18); pl.addColorStop(0, 'rgba(0,0,0,0)'); pl.addColorStop(0.5, 'rgba(255,150,200,0.06)'); pl.addColorStop(1, 'rgba(0,0,0,0.18)');
+    g.fillStyle = pl; g.beginPath(); g.moveTo(0, y0 - 18); g.bezierCurveTo(W * 0.3, y0 - 18 + sw, W * 0.7, y0 - 18 - sw, W, y0 - 18); g.lineTo(W, y0 + 18); g.bezierCurveTo(W * 0.7, y0 + 18 - sw, W * 0.3, y0 + 18 + sw, 0, y0 + 18); g.fill(); }
   const fx = W * 0.62, fy = H * 0.5; let mx = W * 0.18, my = H * 0.5, ma = 0, legReach = 0, ovi = 0, fxo = 0;
   const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
   const st = scene.stage;
@@ -421,9 +437,9 @@ function drawFlies() {
   const singing = st === 'sing' ? Math.max(0.6, scene.wing) : 0;
   fly(g, mx, my, ma, 1.8, { wing: singing, legReach });
   // pulse flashes on her side while she hears song
-  if (now - scene.pulseFlash < 80) { g.strokeStyle = 'rgba(94,230,208,.6)'; g.beginPath(); g.arc(fx + 30, fy, 60, 0, 7); g.stroke(); }
-  if (st === 'sing' && scene.songT >= 0) { g.strokeStyle = `rgba(94,230,208,${0.2 + 0.6 * scene.wing})`; for (let k = 1; k <= 3; k++) { g.beginPath(); g.arc(mx - 10, my - 40, k * 18 * (1 + scene.wing * 0.3), -1.2, 0.2); g.stroke(); } }
-  if (st === 'mate') { g.fillStyle = 'rgba(94,230,208,.9)'; g.fillRect(W * 0.2, H - 18, W * 0.6 * scene.mating, 4); g.strokeStyle = 'rgba(94,230,208,.4)'; g.strokeRect(W * 0.2, H - 18, W * 0.6, 4); }
+  if (now - scene.pulseFlash < 80) { g.strokeStyle = 'rgba(255,104,186,.7)'; g.beginPath(); g.arc(fx + 30, fy, 60, 0, 7); g.stroke(); }
+  if (st === 'sing' && scene.songT >= 0) { g.strokeStyle = `rgba(255,104,186,${0.2 + 0.6 * scene.wing})`; for (let k = 1; k <= 3; k++) { g.beginPath(); g.arc(mx - 10, my - 40, k * 18 * (1 + scene.wing * 0.3), -1.2, 0.2); g.stroke(); } }
+  if (st === 'mate') { g.fillStyle = 'rgba(255,210,63,.9)'; g.fillRect(W * 0.2, H - 18, W * 0.6 * scene.mating, 4); g.strokeStyle = 'rgba(255,210,63,.4)'; g.strokeRect(W * 0.2, H - 18, W * 0.6, 4); }
 }
 function loop() { if (!$('ritual').hidden) { drawFlies(); drawOsc(); idleMale(); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);

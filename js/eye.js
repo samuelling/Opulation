@@ -65,7 +65,7 @@ export class FlyEye {
   /** draw the four lenses into a canvas */
   draw(canvas, L) {
     const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, panels = [['photoreceptors', 'photo'], ['ON: Mi1, Tm3', 'on'], ['OFF: Tm1, 2, 4, 9', 'off'], ['motion: T4, T5', 'mo']];
-    g.fillStyle = '#0b070e'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#12040c'; g.fillRect(0, 0, W, H);
     const pw = W / 4, s = (pw * 0.44) / this.R, r = Math.max(1.5, s * 0.55);
     panels.forEach(([label, key], p) => {
       const ox = pw * p + pw / 2, oy = H / 2 - 8;
@@ -73,10 +73,10 @@ export class FlyEye {
         const x = ox + this.X[c] * s, y = oy - this.Y[c] * s; let col;
         if (key === 'photo') { const v = Math.round(255 * L.photo[c]); col = `rgb(${v},${Math.round(v * 0.93)},${Math.round(v * 0.85)})`; }
         else if (key === 'mo') { const a = Math.min(1, L.mo[c] / this.max.mo); const hue = (L.dir[c] * 180 / Math.PI + 360) % 360; col = `hsla(${hue},80%,60%,${a})`; }
-        else { const v = L[key][c] / this.max[key]; col = v > 0 ? `rgba(255,181,71,${Math.min(1, v)})` : `rgba(94,150,230,${Math.min(1, -v)})`; }
+        else { const v = L[key][c] / this.max[key]; col = v > 0 ? `rgba(240,160,75,${Math.min(1, v)})` : `rgba(90,166,232,${Math.min(1, -v)})`; }
         g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
       }
-      g.fillStyle = 'rgba(239,228,210,.9)'; g.font = '24px -apple-system, sans-serif'; g.textAlign = 'center'; g.fillText(label, ox, H - 8);
+      g.fillStyle = 'rgba(243,227,211,.9)'; g.font = '22px "Courier Prime", monospace'; g.textAlign = 'center'; g.fillText(label, ox, H - 8);
     });
     g.textAlign = 'left';
   }

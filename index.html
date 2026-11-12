@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Opulation</title>
-<meta name="theme-color" content="#120b17">
+<meta name="theme-color" content="#1a0610">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Courier+Prime:wght@400;700&family=Spline+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@1,400;1,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/opulation.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%99%80%3C/text%3E%3C/svg%3E">
 <script src="js/vendor/libsodium-sumo.js"></script>
@@ -12,8 +14,36 @@
 </head>
 <body>
 <header>
-  <h1>Opulation</h1>
-  <p class="tag">Two phones may only share a secret once they have courted like fruit flies.</p>
+  <div class="brand">
+    <svg id="logo" viewBox="0 0 72 56" aria-hidden="true">
+      <defs>
+        <pattern id="facets" width="2.6" height="2.25" patternUnits="userSpaceOnUse" patternTransform="scale(0.9)">
+          <polygon points="1.3,0 2.6,0.75 2.6,1.5 1.3,2.25 0,1.5 0,0.75" fill="#FF68BA" stroke="#1a0610" stroke-width="0.4"/>
+        </pattern>
+        <radialGradient id="shine" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <!-- one wing raised: he is singing -->
+      <g class="wing left">
+        <path d="M33 24 C 22 12, 6 8, 4 18 C 3 26, 16 31, 31 29 Z" fill="#FF68BA22" stroke="#FF68BA" stroke-width="1.2" stroke-linejoin="round"/>
+        <g class="strings" stroke="#f3e3d3" stroke-width="0.6" opacity=".85">
+          <line x1="9" y1="13" x2="13" y2="27"/><line x1="14" y1="12" x2="17" y2="28"/><line x1="19" y1="13" x2="21" y2="29"/><line x1="24" y1="15" x2="25" y2="29"/><line x1="28" y1="19" x2="29" y2="29"/>
+        </g>
+      </g>
+      <g class="wing right"><path d="M39 26 C 48 24, 60 26, 64 31 C 60 34, 50 33, 41 30 Z" fill="#FF68BA18" stroke="#FF68BA" stroke-width="1.2" stroke-linejoin="round"/></g>
+      <ellipse cx="36" cy="40" rx="6" ry="9.5" fill="#F3E3D3"/>
+      <path d="M30.4 37 H41.6 M30.2 41 H41.8 M31 45 H41" stroke="#1a0610" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="36" cy="27" rx="7" ry="6.5" fill="#F3E3D3"/>
+      <circle cx="36" cy="17" r="5.5" fill="#F3E3D3"/>
+      <path d="M34 12 C 32 7, 29 5, 27 5 M38 12 C 40 7, 43 5, 45 5" stroke="#F3E3D3" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      <g class="eyes"><circle cx="30.5" cy="16.5" r="5" fill="url(#facets)" stroke="#1a0610" stroke-width=".7"/><circle cx="41.5" cy="16.5" r="5" fill="url(#facets)" stroke="#1a0610" stroke-width=".7"/>
+        <circle cx="30.5" cy="16.5" r="5" fill="url(#shine)"/><circle cx="41.5" cy="16.5" r="5" fill="url(#shine)"/></g>
+    </svg>
+    <div class="titles">
+      <h1 class="logo" aria-label="Opulation"><span class="ink">OPUL<span class="lc">ation</span></span><span class="mis" aria-hidden="true">OPUL<span class="lc">ation</span></span></h1>
+      <span class="kicker">a secret passes only after a proper <i>Drosophila</i> courtship</span>
+    </div>
+  </div>
+  <p class="tag">Dim the lights. Bring two phones close. He looks, he taps, he sings; if she likes the song, they're alone together.</p>
 </header>
 
 <main>
@@ -34,7 +64,7 @@
     </label>
     <button id="go" class="go">Begin courtship</button>
     <p id="setupMsg" class="msg" hidden></p>
-    <p class="small">Hold the phones a foot apart, speakers facing. Both listen and both sing, in turns.</p>
+    <p class="small">Hold the phones a foot apart, speakers facing, the room quiet. Both listen and both sing, in turns.</p>
   </section>
 
   <section id="ritual" hidden>
@@ -64,7 +94,7 @@
       </figure>
       <figure id="brainMale" class="brain">
         <figcaption><b>His courtship circuit</b><span>schematic, from the literature: FlyWire has no male</span></figcaption>
-        <canvas id="mNet" width="720" height="300"></canvas>
+        <canvas id="mNet" width="720" height="380"></canvas>
         <canvas id="osc" width="720" height="110" aria-label="His song"></canvas>
       </figure>
     </div>
