@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>link test</title><pre id="out"></pre>
+<script type="module">
+// Two peers in one page, connected only through the compact blobs (as the phones exchange them by sound).
+import * as Link from '../js/link.js';
+const log = (s) => { document.getElementById('out').textContent += s + '\n'; console.log(s); };
+try {
+  const A = await Link.offer(); log('offer blob ' + A.blob.length + ' bytes');
+  const B = await Link.answer(A.blob); log('answer blob ' + B.blob.length + ' bytes');
+  await Link.complete(A.pc, B.blob);
+  const bdc = await B.dc; const [oa, ob] = await Promise.all([Link.open(A.dc), Link.open(bdc)]); log('open ' + oa + ' ' + ob);
+  const got = []; const nb = new Link.Nest(bdc, { onItem: (it) => got.push(it) }), na = new Link.Nest(A.dc);
+  const big = new Uint8Array(3_000_000); for (let i = 0; i < big.length; i++) big[i] = (i * 31) & 255;
+  const t0 = performance.now(); await na.send(new File([big], 'big.bin')); await na.send('hello from the nest');
+  for (let i = 0; i < 100 && got.length < 2; i++) await new Promise(r => setTimeout(r, 100));
+  const back = new Uint8Array(await got[0].blob.arrayBuffer()); let same = back.length === big.length; for (let i = 0; same && i < big.length; i += 997) same = back[i] === big[i];
+  log(`file ${same ? 'intact' : 'CORRUPT'} ${back.length} bytes in ${(performance.now() - t0).toFixed(0)} ms; note: ${await got[1].blob.text()}`);
+  log('RESULT ' + (oa && ob && same ? 'PASS' : 'FAIL'));
+} catch (e) { log('RESULT FAIL ' + e.message); }
+</script>

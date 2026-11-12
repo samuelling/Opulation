@@ -6,14 +6,16 @@
 //   ACCEPT  her → him     (modem)   4 | sid4 | tagF(16)                          she slows and opens; tagF is her
 //                                                                                 pheromone: proof she is his kind
 //   KICK    her → him     (modem)   6 | sid4                                     she kicks; she won't listen for a while
-//   GIFT    he → her      (modem)   5 | sid4 | nonce(24) | sealed gift            copulation: the transfer
+//   OFFER   he → her      (modem)   7 | sid4 | nonce(24) | sealed WebRTC offer    copulation: a direct link opens
+//   ANSWER  her → him     (modem)   8 | sid4 | nonce(24) | sealed WebRTC answer   (js/link.js), for files and photos
+//   GIFT    he → her      (modem)   5 | sid4 | nonce(24) | sealed note            a note by sound, if no link opens
 //
 // Modem frames use the Screech modem (frame version 5). The gift is sealed with XChaCha20-Poly1305 under kx,
 // with its 5-byte header as associated data.
 import * as C from './cpace.js';
 
 export const VERSION = 5, LOOK_VERSION = 1;
-export const T = { TAP: 1, ACCEPT: 4, KICK: 6, GIFT: 5 };
+export const T = { TAP: 1, ACCEPT: 4, KICK: 6, GIFT: 5, OFFER: 7, ANSWER: 8 };
 const te = new TextEncoder(), td = new TextDecoder();
 const head = (t, sid) => Uint8Array.of(t, sid[0], sid[1], sid[2], sid[3]);
 const sid4eq = (a, b) => a[1] === b[0] && a[2] === b[1] && a[3] === b[2] && a[4] === b[3];
@@ -58,4 +60,14 @@ export class Memory {
   rejected(now = Date.now()) { this.s.rejects++; this.s.until = now + Math.min(600, 10 * 2 ** (this.s.rejects - 1)) * 1000; this.save(); }
   mated(sid) { this.s.rejects = 0; this.s.until = 0; this.s.mated.push(C.sodium().to_hex(sid)); this.s.mated = this.s.mated.slice(-200); this.save(); }
   seen(sid) { return this.s.mated.includes(C.sodium().to_hex(sid)); }
+}
+
+/** a sealed turn of any type (used for the WebRTC offer and answer): only her mate can open or forge it */
+export function seal(t, sid, keys, bytes) {
+  const S = C.sodium(), h = head(t, sid), nonce = S.randombytes_buf(24);
+  return C.cat(h, nonce, S.crypto_aead_xchacha20poly1305_ietf_encrypt(bytes, h, null, nonce, keys.kx));
+}
+export function unseal(t, b, sid, keys) {
+  if (b.length < 5 + 24 + 16 || b[0] !== t || !sid4eq(b, sid)) return null;
+  try { return C.sodium().crypto_aead_xchacha20poly1305_ietf_decrypt(null, b.subarray(29), b.subarray(0, 5), b.subarray(5, 29), keys.kx); } catch (e) { return null; }
 }

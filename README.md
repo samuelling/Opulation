@@ -12,7 +12,7 @@ Two phones may only share a secret once they have courted like fruit flies.
 | **Tap** | He taps her with a foreleg. | His half of the key exchange, by sound (the [Screech](https://samuelling.github.io/Screech/) modem, 2.3 s). Both phones now hold the same session key, if their passphrases match. |
 | **Sing** | He extends one wing and sings: sine song, then four pulse trains. | His key-confirmation tag (16 bytes) *is* the song: 64 inter-pulse intervals of 30, 36, 42 or 48 ms. Played three octaves up for phone speakers; she decodes the intervals and replays the true-pitch song (270 Hz pulses, 155 Hz hum) into her ears. |
 | **She decides** | She slows and opens, or kicks and runs. | Her ears are FlyHarp's FlyWire auditory network. Every interval that matches the song she expects lets her song pathway's activity raise her receptivity; every wrong note is a kick. More than four wrong notes and she rejects him. Her acceptance carries her own tag (her pheromone), which he checks. |
-| **Mate** | Copulation. | The gift passes, sealed with XChaCha20-Poly1305 under a key from the session. The pairing is then spent. |
+| **Mate** | Copulation. | The nest opens: a direct WebRTC link between the phones, for photos, files and notes, both ways, as many as you like. Its connection details (about 90 bytes) go by sound, sealed with the session key, so the link's encryption is bound to the passphrase and nobody can sit in the middle. No server relays anything. If the phones can't reach each other directly (no TURN relay), his first note still goes by sound. |
 
 After a rejection she won't show herself for a while (10 s, doubling up to 10 min): courtship conditioning, and a brake on anyone guessing passphrases.
 
@@ -37,7 +37,8 @@ After a rejection she won't show herself for a while (10 s, doubling up to 10 mi
 index.html  css/opulation.css
 js/cpace.js     CPace + key confirmation and derived keys (libsodium)
 js/flycode.js   her face: the visual code in her compound eyes (draw + read, Reed-Solomon)
-js/protocol.js  the turns: look, tap, accept / kick, gift; conditioning and mated memory
+js/protocol.js  the turns: look, tap, accept / kick, sealed link offer/answer, gift; conditioning and mated memory
+js/link.js      the nest: compact WebRTC offers/answers (~90 bytes) and file/photo/note transfer
 js/song.js      the song: tag <-> intervals, the ideal antenna frames, her listener, on-air render, pulse detector
 js/female.js    the FlyWire auditory network in Q16 integers, with a seeded personality
 js/male.js      his schematic courtship circuit
@@ -55,5 +56,7 @@ tools/          make-model.mjs, test*.mjs (npm install; npm test)
 - agreement between her brain and the crypto over random sessions
 - the song through simulated echo
 - a full two-phone ritual through camera and room.
+
+`tools/rtc-test.html` connects two WebRTC peers using only the compact blobs and moves a 3 MB file (open it from a local server).
 
 **iPhone:** to come, as a native Swift app that works with the web version. libsodium (swift-sodium) gives the same CPace. The female port must reproduce `data/vectors.json`.

@@ -29,8 +29,8 @@
     <label class="field">Shared passphrase<span class="hint">Your species. Only a mate with the same one will do.</span>
       <input id="pass" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. bromeliad at dusk">
     </label>
-    <label class="field" id="giftField">The gift<span class="hint">What you'll pass if she accepts you.</span>
-      <textarea id="gift" rows="3" maxlength="200" placeholder="A secret note"></textarea>
+    <label class="field" id="giftField">A first note <span class="hint">Optional. Sent the moment she accepts; after that you can send files and photos.</span>
+      <textarea id="gift" rows="2" maxlength="200" placeholder="A secret note"></textarea>
     </label>
     <button id="go" class="go">Begin courtship</button>
     <p id="setupMsg" class="msg" hidden></p>
@@ -67,7 +67,16 @@
       </figure>
     </div>
 
-    <section id="giftOut" class="card gift" hidden><h2>Her gift from him</h2><p id="giftText"></p></section>
+    <section id="nest" class="card nest" hidden>
+      <h2>The nest</h2>
+      <p id="nestStatus" class="small"></p>
+      <div id="nestSend" class="nestsend" hidden>
+        <label class="pick">Send photos<input id="pickPhoto" type="file" accept="image/*" multiple hidden></label>
+        <label class="pick">Send files<input id="pickFile" type="file" multiple hidden></label>
+        <div class="noterow"><input id="noteIn" placeholder="A note" maxlength="2000"><button id="noteSend" class="pick">Send</button></div>
+      </div>
+      <ul id="items" class="items"></ul>
+    </section>
     <div class="row"><button id="again" class="ghost">Start over</button><span id="air" class="air"></span></div>
   </section>
 </main>

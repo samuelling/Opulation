@@ -48,6 +48,9 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   const g = P.parseGift(P.gift(l1.sid, mk, { kind: 'text', text: 'meet me by the bromeliad' }), her.sid, hk);
   ok(g && g.text === 'meet me by the bromeliad', 'the gift arrives sealed and opens');
   const bad = P.gift(l1.sid, mk, { kind: 'text', text: 'x' }); bad[40] ^= 1; ok(P.parseGift(bad, her.sid, hk) === null, 'a tampered gift is refused');
+  { const o = P.seal(P.T.OFFER, l1.sid, mk, Uint8Array.of(1, 2, 3)); const back = P.unseal(P.T.OFFER, o, her.sid, hk);
+    ok(back && back.length === 3 && back[2] === 3, 'the sealed WebRTC offer opens for her'); o[33] ^= 1; ok(P.unseal(P.T.OFFER, o, her.sid, hk) === null, '…and not if tampered with');
+    const x = Mo.synthesize(P.seal(P.T.OFFER, l1.sid, mk, new Uint8Array(90)), 0, 'quick', { fs: 48000, version: P.VERSION }); console.log(`     a sealed 90-byte offer takes ${(x.length / 48000).toFixed(1)} s by sound`); }
   const stranger = C.respond('pickled hering', l1.sid, l1.Ya), sk = her.finish(stranger.Yb);
   ok(P.parseVerdict(P.accept(her.sid, sk), l1.sid, stranger.keys) === 'wrongkind', 'with another passphrase her pheromone tastes wrong');
   const c1 = { sid: l1.sid };

@@ -6,6 +6,7 @@ import { FemaleBrain, personality } from './female.js';
 import { MaleCircuit, NODES, EDGES } from './male.js';
 import { NoteDecoder, synthesize, frameSeconds } from './modem.js';
 import * as F from './flycode.js';
+import * as Link from './link.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -31,15 +32,14 @@ const memory = new P.Memory({ get: (k) => { try { return localStorage.getItem(k)
 $('go').onclick = async () => {
   const pass = $('pass').value;
   if (!pass) return showSetupMsg('Choose a passphrase first: it is your species.');
-  if (role === 'male' && !$('gift').value.trim()) return showSetupMsg('Write the gift you want to pass.');
   try { localStorage.setItem('opulation.pass', pass); } catch (e) {}
   $('go').disabled = true;
   try { await boot; await startAudio(); } catch (e) { $('go').disabled = false; return showSetupMsg(e.message); }
-  $('setup').hidden = true; $('ritual').hidden = false; $('giftOut').hidden = true;
+  $('setup').hidden = true; $('ritual').hidden = false; resetNest();
   run = { id: Math.random() };
   if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
 };
-$('again').onclick = () => { run = null; stopListening(); $('look').hidden = true; $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
+$('again').onclick = () => { run = null; stopListening(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
 const showSetupMsg = (t) => { $('setupMsg').textContent = t; $('setupMsg').hidden = false; };
 let run = null;
 const alive = (r) => run === r;
@@ -120,10 +120,30 @@ async function maleFlow(pass, giftText, r) {
   if (!alive(r)) return;
   if (verdict === 'wrongkind') { stage('decide', true); caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); air(''); return; }
   if (verdict !== 'accept') { stage('decide', true); scene.kick = performance.now(); caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.'); air(''); return; }
-  stage('mate'); caption('She slows and opens, and she tastes right. They mate: the gift passes, sealed.');
-  const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
-  await playFrame(g, (t) => { scene.mating = Math.min(1, t / dur); air(`passing the gift ${Math.round(100 * Math.min(1, t / dur))}%`); });
-  caption('Done. The gift is hers; this pairing is spent.'); air('mated'); scene.mating = 1;
+  stage('mate'); caption('She slows and opens, and she tastes right. They mate.');
+  // copulation: open a direct link for files and photos; its keys travel sealed, by sound
+  let link = null;
+  if (window.RTCPeerConnection) {
+    try {
+      air('opening the nest…'); const o = await Link.offer();
+      for (let tries = 0; tries < 3 && !link && alive(r); tries++) {
+        air(tries ? `opening the nest (${tries + 1})…` : 'opening the nest (modem)…'); scene.mating = 0.2 + 0.2 * tries;
+        await playFrame(P.seal(P.T.OFFER, seen.sid, keys, o.blob));
+        const ansB = await waitFrame((b) => P.unseal(P.T.ANSWER, b, seen.sid, keys), 10000);
+        if (ansB) { await Link.complete(o.pc, ansB); air('connecting…'); if (await Link.open(o.dc)) link = o; }
+      }
+    } catch (e) { console.warn(e); }
+  }
+  if (!alive(r)) return;
+  scene.mating = 1; memory.mated(seen.sid);
+  if (link) { openNest(link.dc, giftText); caption('Mated. The nest is open: send her photos and files.'); air('mated'); return; }
+  // no direct link: the note goes by sound
+  if (giftText) {
+    const g = P.gift(seen.sid, keys, { kind: 'text', text: giftText }), dur = frameSeconds(g.length, 'quick');
+    await playFrame(g, (t) => air(`passing the note by sound ${Math.round(100 * Math.min(1, t / dur))}%`));
+  }
+  nestStatus('No direct link opened between the phones (are they on networks that can reach each other?). ' + (giftText ? 'Your note went by sound.' : ''), false);
+  caption('Mated, but the nest would not open.'); air('mated');
 }
 /** his camera, until he has read her face */
 async function lookForHer(r) {
@@ -186,19 +206,68 @@ async function femaleFlow(pass, r) {
     const accepted = result === 'accept';
     stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : 'Wrong notes. She kicks and runs.');
     if (!accepted) { scene.kick = performance.now(); memory.rejected(); air('she kicks (modem)…'); await playFrame(P.kick(her.sid)); air(''); await sleep(2500); continue; }
-    let gift = null;
-    for (let tries = 0; tries < 3 && !gift && alive(r); tries++) {
+    // copulation: he opens a direct link (or, failing that, passes a note by sound)
+    let got = null;
+    for (let tries = 0; tries < 4 && !got && alive(r); tries++) {
       air('she accepts (modem)…'); await playFrame(P.accept(her.sid, keys));
-      stage('mate'); caption('They mate. The gift is passing…'); air('receiving the gift…');
-      gift = await waitFrame((b) => P.parseGift(b, her.sid, keys), 20000, (e) => { if (e.kind === 'progress') { scene.mating = e.frac; air(`receiving ${Math.round(100 * e.frac)}%`); } });
+      stage('mate'); caption('They mate.'); air('waiting for him…');
+      got = await waitFrame((b) => { const o = P.unseal(P.T.OFFER, b, her.sid, keys); if (o) return { offer: o }; const g = P.parseGift(b, her.sid, keys); return g ? { gift: g } : null; }, 14000,
+        (e) => { if (e.kind === 'progress') scene.mating = e.frac; });
     }
     if (!alive(r)) return;
-    if (!gift) { caption('He never passed the gift.'); continue; }
-    scene.mating = 1; memory.mated(her.sid);
-    $('giftOut').hidden = false; $('giftText').textContent = gift.text ?? `${gift.bytes.length} bytes`;
-    caption('She has his gift. She is mated: this pairing is spent.'); air('mated'); return;
+    if (!got) { caption('He went quiet.'); continue; }
+    memory.mated(her.sid);
+    if (got.gift) { resetNest(); $('nest').hidden = false; addItem({ dir: 'in', kind: 'note', text: got.gift.text }); nestStatus('His note came by sound; no direct link.', false); caption('Mated. His note is hers.'); scene.mating = 1; air('mated'); return; }
+    let link = null;
+    try { link = await Link.answer(got.offer); } catch (e) { console.warn(e); }
+    if (link) {
+      air('opening the nest (modem)…'); await playFrame(P.seal(P.T.ANSWER, her.sid, keys, link.blob)); air('connecting…');
+      const dc = await Promise.race([link.dc, sleep(20000).then(() => null)]);
+      if (dc && await Link.open(dc)) { scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); return; }
+    }
+    // the link failed: he may still send a note by sound
+    nestStatus('No direct link opened between the phones. Listening for a note by sound…', false); $('nest').hidden = false;
+    const g = await waitFrame((b) => P.parseGift(b, her.sid, keys), 30000);
+    if (g) addItem({ dir: 'in', kind: 'note', text: g.text });
+    caption('Mated.'); air('mated'); return;
   }
 }
+
+// ---------------------------------------------------------------- the nest: files and photos, once mated
+let nest = null; const rows = new Map();
+function nestStatus(t, ok = true) { $('nestStatus').textContent = t; $('nestStatus').style.color = ok ? '' : 'var(--rose)'; }
+function resetNest() { $('nest').hidden = true; $('nestSend').hidden = true; $('items').innerHTML = ''; rows.clear(); nestStatus(''); }
+function closeNest() { try { nest && nest.dc.close(); } catch (e) {} nest = null; resetNest(); }
+function openNest(dc, firstNote) {
+  resetNest(); $('nest').hidden = false; $('nestSend').hidden = false;
+  nestStatus('Direct and encrypted (DTLS keys exchanged inside the courtship). Stay close; leave the page open until it arrives.');
+  nest = new Link.Nest(dc, { onItem: (it) => addItem(it), onProgress: (p) => progress(p) });
+  dc.addEventListener('close', () => nestStatus('The nest closed.', false));
+  if (firstNote) sendItem(firstNote, 'note');
+}
+async function sendItem(x, kind) { if (!nest) return; const it = await nest.send(x, kind); addItem(it, true); }
+$('pickPhoto').onchange = (e) => { for (const f of e.target.files) sendItem(f, 'photo'); e.target.value = ''; };
+$('pickFile').onchange = (e) => { for (const f of e.target.files) sendItem(f, 'file'); e.target.value = ''; };
+$('noteSend').onclick = () => { const t = $('noteIn').value.trim(); if (t) { sendItem(t, 'note'); $('noteIn').value = ''; } };
+$('noteIn').onkeydown = (e) => { if (e.key === 'Enter') $('noteSend').click(); };
+const human = (n) => n < 1024 ? n + ' B' : n < 1 << 20 ? (n / 1024).toFixed(0) + ' kB' : (n / (1 << 20)).toFixed(1) + ' MB';
+function progress(p) {
+  const key = p.dir + p.id; let li = rows.get(key);
+  if (!li) { li = document.createElement('li'); li.className = p.dir; li.innerHTML = `<div class="meta"><span>${p.dir === 'in' ? 'arriving' : 'sending'}: ${esc(p.name)}</span><span></span></div><progress max="1"></progress>`; $('items').prepend(li); rows.set(key, li); }
+  li.querySelector('progress').value = p.frac; li.querySelector('.meta span:last-child').textContent = Math.round(100 * p.frac) + '%';
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+async function addItem(it, mine = false) {
+  // replace the progress row for this item if there is one
+  let li = null; for (const [k, v] of rows) if (k.startsWith(it.dir) && v.querySelector('.meta span').textContent.endsWith(it.name)) { li = v; rows.delete(k); break; }
+  if (!li) { li = document.createElement('li'); $('items').prepend(li); }
+  li.className = it.dir; const who = it.dir === 'in' ? 'from your mate' : 'sent';
+  if (it.kind === 'note') { const text = it.text ?? await it.blob.text(); li.innerHTML = `<div class="meta"><span>note · ${who}</span></div><div class="note">${esc(text)}</div>`; return; }
+  const url = URL.createObjectURL(it.blob), isImg = (it.type || '').startsWith('image/');
+  li.innerHTML = `<div class="meta"><span>${isImg ? 'photo' : 'file'} · ${who}</span><span>${human(it.size)}</span></div>` +
+    (isImg ? `<img src="${url}" alt="${esc(it.name)}">` : '') + `<a href="${url}" download="${esc(it.name)}">${esc(it.name)}</a>`;
+}
+
 /** listen to the song as it arrives; her brain runs train by train and replays in real time just behind it */
 function hearSong(L, queue, expected, r) {
   return new Promise((res) => {
