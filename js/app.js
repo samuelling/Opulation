@@ -8,6 +8,7 @@ import * as Sung from './flysong.js';
 import * as F from './flycode.js';
 import * as Link from './link.js';
 import { FlyEye } from './eye.js';
+import { maleStage } from './flyart.js';
 let eye = null;
 
 const $ = (id) => document.getElementById(id);
@@ -37,12 +38,15 @@ $('go').onclick = async () => {
   try { localStorage.setItem('opulation.pass', pass); } catch (e) {}
   $('go').disabled = true;
   try { await boot; await startAudio(); } catch (e) { $('go').disabled = false; return showSetupMsg(e.message); }
+  document.body.classList.remove('male', 'female'); document.body.classList.add(role);
   $('setup').hidden = true; $('ritual').hidden = false; resetNest(); window.scrollTo({ top: $('ritual').offsetTop - 8, behavior: 'smooth' });
   run = { id: Math.random() };
   if (role === 'male' && !eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }   // his optic lobe takes ~2 s to wake
   if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
 };
-$('again').onclick = () => { run = null; stopListening(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
+$('again').onclick = () => { document.body.classList.remove('male', 'female'); run = null; stopListening(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
+const openHow = () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); };
+$('howBtn').onclick = openHow; $('howBtn2').onclick = openHow;
 const showSetupMsg = (t) => { $('setupMsg').textContent = t; $('setupMsg').hidden = false; };
 let run = null;
 const alive = (r) => run === r;
@@ -90,6 +94,7 @@ function waitFrame(accept, ms, onEvent) {
     let t = setTimeout(() => done(null), ms);
     const dec = new Sung.FlySongDecoder({ sampleRate: ctx.sampleRate, onEvent: (e) => {
       if (e.kind === 'pulse') { scene.pulseFlash = performance.now(); ring(); }
+      if (liveEar) liveEar.feed(e);
       if (e.kind === 'header') { clearTimeout(t); t = setTimeout(() => done(null), (e.seconds + 4) * 1000); }
       if (onEvent) onEvent(e);
       if (e.kind === 'frame' && e.ok) { const v = accept(e.bytes); if (v) done(v); }
@@ -102,11 +107,12 @@ function waitFrame(accept, ms, onEvent) {
 // ---------------------------------------------------------------- the stage
 const STAGES = ['orient', 'tap', 'sing', 'decide', 'mate'];
 function stage(s, bad = false) {
+  if (s === 'orient') { scene.kick = 0; scene.finished = 0; scene.mating = 0; }
   const i = STAGES.indexOf(s);
   for (const li of $('stages').children) { const j = STAGES.indexOf(li.dataset.s); li.className = j < i ? 'done' : j === i ? (bad ? 'bad' : 'now') : ''; }
   scene.stage = s; scene.bad = bad; scene.t0 = performance.now();
 }
-const caption = (t) => { $('caption').textContent = t; };
+const caption = (t) => { $('caption').textContent = t; $('fCaption').textContent = t; };
 /** the plain instruction: what to do with your phone right now */
 const todo = (t, done = false) => { $('todoT').textContent = t; $('todo').classList.toggle('done', done); };
 const air = (t) => { $('air').textContent = t; };
@@ -212,6 +218,7 @@ async function femaleFlow(pass, r) {
     if (wait > 0) { $('look').hidden = true; caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); todo(`Wait ${Math.ceil(wait / 1000)} s. Meanwhile, double-check the passphrase with him.`); await sleep(1000); continue; }
     // a fresh face each time: her half of the key exchange, in her eyes
     const her = new C.Initiator(pass), bits = F.facetBits(P.look(her));
+    liveEar = new LiveEar(null);   // before she knows him: a typical female
     $('look').hidden = false; $('cam').hidden = true; $('face').hidden = false; F.drawCanvas($('face').getContext('2d'), bits, 1000);
     $('lookCap').textContent = 'Show him your face: hold your screen up to his camera, bright and still.';
     caption('She waits to be seen.'); air('listening…'); todo('Turn your brightness up and hold this screen toward his camera. When his phone locks on, set yours down a foot from his, speakers facing.');
@@ -227,7 +234,7 @@ async function femaleFlow(pass, r) {
       const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
       const L = new Song.Listener(brain, expected, M), queue = []; L.onFrame = (st, b) => queue.push({ st, r: snapR(b) });
       stage('sing'); caption('She listens for his song.'); air('listening for song…'); resetNotes();
-      result = await hearSong(L, queue, expected, r);
+      liveEar = null; result = await hearSong(L, queue, expected, r); liveEar = new LiveEar(keys.seed);
     }
     if (!alive(r)) return;
     const accepted = result === 'accept';
@@ -274,7 +281,7 @@ function openNest(dc, firstNote) {
   nestStatus('session open · direct, encrypted, kept nowhere');
   sys('She accepted. This lasts as long as you both do.');
   nest = new Link.Nest(dc, { onItem: (it) => addItem(it), onProgress: (p) => progress(p) });
-  dc.addEventListener('close', () => { nest = null; $('nestSend').classList.add('off'); $('nestTitle').textContent = 'All finished'; nestStatus('spent · nothing kept', false);
+  dc.addEventListener('close', () => { scene.finished = performance.now(); nest = null; $('nestSend').classList.add('off'); $('nestTitle').textContent = 'All finished'; nestStatus('spent · nothing kept', false);
     sys('…and that\'s that. You\'re both finished; nothing was kept. Save anything you want before you slip away.'); });
   if (firstNote) sendItem(firstNote, 'note');
   $('nest').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -324,6 +331,26 @@ function hearSong(L, queue, expected, r) {
   });
 }
 
+// ---------------------------------------------------------------- her ears, live: every turn he sings goes through her FlyWire network
+// (the key song has its own listener, which also judges it; this one just hears)
+let liveEar = null;
+class LiveEar {
+  constructor(seed) {
+    this.brain = new FemaleBrain(meta, bin, M, personality(S, seed || new Uint8Array(32), meta.n));
+    this.framer = new Song.Framer(M); this.sch = { pulses: [], hums: [], end: 1e12 }; this.dirty = false;
+  }
+  feed(e) {
+    const T = (t) => Math.round(t / M.song.tick);
+    if (e.kind === 'pulse') this.sch.pulses.push({ t: T(e.t), k: -1 });
+    else if (e.kind === 'hum') { const h = this.sch.hums[this.sch.hums.length - 1], t = T(e.t); if (h && t - h.t1 < 200) h.t1 = t; else this.sch.hums.push({ t0: t - 80, t1: t }); }
+    else if (e.kind === 'time') {
+      const upto = T(e.t) - M.envOff - 40;
+      while ((this.framer.n + 1) * M.dtTicks <= upto) { const fr = this.framer.next(this.sch); this.brain.input(fr.f); this.brain.step(); this.dirty = true; }
+    }
+  }
+  draw() { if (!this.dirty) return; this.dirty = false; const r = snapR(this.brain); drawNet(r); showAreas(r); }
+}
+
 // ---------------------------------------------------------------- her brain on screen
 let pos = null, areaIdx = null, readSet = null, vpo = [];
 // FlyHarp's area palette: ears teal, AMMC/saddle violet, wedge yellow, AVLP red, GNG orange; the song readout hot pink
@@ -343,12 +370,14 @@ function prepNet() {
 }
 function snapR(b) { const a = new Uint8Array(b.N); for (let i = 0; i < b.N; i++) a[i] = Math.min(255, b.r[i] >> 8); return a; }
 function resetNotes() { for (const s of $('notes').children) s.className = ''; $('rBar').style.width = '0'; $('rVal').textContent = ''; }
+function showAreas(r) {
+  const bars = $('fAreas').querySelectorAll('b');
+  areaIdx.forEach((ids, k) => { let s = 0; for (const i of ids) s += r[i]; const m = ids.length ? s / ids.length / 255 : 0; bars[k].style.height = Math.min(100, 100 * Math.sqrt(m * 4)) + '%'; });
+}
 function showFemale(st, r, predicted, skipDraw = false) {
   for (const p of st.pulses) if (p.k >= 0) $('notes').children[p.k].className = st.cur === 'match' ? 'm' : 'w';
   if (skipDraw) return;
-  drawNet(r);
-  const bars = $('fAreas').querySelectorAll('b');
-  areaIdx.forEach((ids, k) => { let s = 0; for (const i of ids) s += r[i]; const m = ids.length ? s / ids.length / 255 : 0; bars[k].style.height = Math.min(100, 100 * Math.sqrt(m * 4)) + '%'; });
+  drawNet(r); showAreas(r);
   const full = Song.LISTEN.THETA * 2.5;   // the threshold mark sits at 40%
   $('rBar').style.width = Math.min(100, 100 * st.R / full) + '%';
   $('rVal').textContent = st.verdict ? (st.verdict === 'accept' ? 'accepts' : 'rejects') : `${st.matched} right · ${st.wrong} wrong${predicted ? ' (predicted)' : ''}`;
@@ -415,60 +444,16 @@ function ring() { if (!strings) return; strings.classList.remove('ring'); void s
 (function idle() { setTimeout(() => { if (!document.hidden && performance.now() - lastJit > 3000) jitter(); idle(); }, 3500 + Math.random() * 5500); })();
 
 // ---------------------------------------------------------------- the two flies
-const scene = { stage: 'orient', bad: false, t0: 0, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, pulseFlash: 0 };
-function resetScene() { Object.assign(scene, { stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0 }); resetNotes(); }
-function fly(g, x, y, ang, s, { wing = 0, female = false, legReach = 0, ovi = 0 }) {
-  g.save(); g.translate(x, y); g.rotate(ang); g.scale(s, s);
-  g.lineWidth = 2.2 / s; g.strokeStyle = '#f3e3d3'; g.lineJoin = 'round'; g.lineCap = 'round';
-  // legs
-  for (const side of [-1, 1]) for (const [lx, a, l] of [[10, -0.7, 22], [0, -1.5, 20], [-10, -2.3, 24]]) {
-    let aa = a; if (lx === 10 && side === 1 && legReach) aa = -0.2 - 0.3 * legReach;
-    const ex = lx + Math.cos(aa) * l * (lx === 10 && legReach ? 1 + 0.6 * legReach : 1), ey = side * Math.sin(-aa) * l;
-    g.beginPath(); g.moveTo(lx, side * 6); g.quadraticCurveTo((lx + ex) / 2, side * (10 + Math.abs(ey) * 0.4), ex, ey); g.stroke();
-  }
-  // wings (one extended and vibrating when singing)
-  const vib = wing ? Math.sin(performance.now() / 6) * 0.18 * wing : 0;
-  for (const side of [-1, 1]) {
-    const open = side === -1 ? wing * 1.25 + vib : 0;
-    g.save(); g.rotate(side * (0.18 + open)); g.fillStyle = 'rgba(255,104,186,0.12)'; g.beginPath(); g.ellipse(-26, side * 6, 30, 9, 0, 0, 7); g.fill(); g.stroke(); g.restore();
-  }
-  // abdomen (bands; hers rounder), thorax, head, red eyes
-  g.fillStyle = '#3a0f24'; g.beginPath(); g.ellipse(-20 - 6 * (female ? 1 : 0), 0, female ? 20 : 16, female ? 12 : 10, 0, 0, 7); g.fill(); g.stroke();
-  for (let k = 0; k < (female ? 4 : 3); k++) { g.beginPath(); g.moveTo(-14 - k * 7 - (female ? 6 : 0), -8); g.quadraticCurveTo(-17 - k * 7 - (female ? 6 : 0), 0, -14 - k * 7 - (female ? 6 : 0), 8); g.stroke(); }
-  if (!female) { g.fillStyle = '#f3e3d3'; g.beginPath(); g.ellipse(-31, 0, 4, 6, 0, 0, 7); g.fill(); }
-  if (female && ovi) { g.beginPath(); g.moveTo(-46, 0); g.lineTo(-46 - 10 * ovi, 0); g.stroke(); }
-  g.fillStyle = '#4a1530'; g.beginPath(); g.ellipse(2, 0, 11, 9, 0, 0, 7); g.fill(); g.stroke();
-  g.beginPath(); g.ellipse(17, 0, 6, 8, 0, 0, 7); g.fill(); g.stroke();
-  g.fillStyle = '#ff3d5a'; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(19, sd * 6, 3.6, 4.2, 0, 0, 7); g.fill(); }
-  g.restore();
-}
+const scene = { stage: 'orient', bad: false, t0: 0, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, pulseFlash: 0, finished: 0 };
+function resetScene() { Object.assign(scene, { stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, finished: 0 }); resetNotes(); }
 function drawFlies() {
-  const c = $('flies'), g = c.getContext('2d'), W = c.width, H = c.height, now = performance.now(), dt = (now - scene.t0) / 1000;
-  g.clearRect(0, 0, W, H);
-  // a velvet bed: pleats in crushed crimson, a pool of low pink light
-  const grd = g.createRadialGradient(W / 2, H * 0.55, 10, W / 2, H * 0.55, W * 0.6); grd.addColorStop(0, 'rgba(255,104,186,0.20)'); grd.addColorStop(0.5, 'rgba(120,20,60,0.12)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
-  for (let k = 0; k < 9; k++) { const y0 = H * (k + 0.5) / 9, sw = Math.sin(now / 4000 + k) * 10;
-    const pl = g.createLinearGradient(0, y0 - 18, 0, y0 + 18); pl.addColorStop(0, 'rgba(0,0,0,0)'); pl.addColorStop(0.5, 'rgba(255,150,200,0.06)'); pl.addColorStop(1, 'rgba(0,0,0,0.18)');
-    g.fillStyle = pl; g.beginPath(); g.moveTo(0, y0 - 18); g.bezierCurveTo(W * 0.3, y0 - 18 + sw, W * 0.7, y0 - 18 - sw, W, y0 - 18); g.lineTo(W, y0 + 18); g.bezierCurveTo(W * 0.7, y0 + 18 - sw, W * 0.3, y0 + 18 + sw, 0, y0 + 18); g.fill(); }
-  const fx = W * 0.62, fy = H * 0.5; let mx = W * 0.18, my = H * 0.5, ma = 0, legReach = 0, ovi = 0, fxo = 0;
-  const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
-  const st = scene.stage;
-  if (st === 'orient') { mx = W * 0.12 + W * 0.18 * ease(dt / 2.5); ma = -0.4 + 0.4 * ease(dt / 1.5); }
-  else { mx = W * 0.30; }
-  if (st === 'tap') { mx = W * 0.30 + W * 0.08 * ease(dt / 0.8); legReach = 0.5 + 0.5 * Math.sin(dt * 9); }
-  if (st === 'sing') mx = W * 0.38;
-  if (st === 'decide') { mx = W * 0.38; if (scene.bad) { const k = (now - scene.kick) / 1000; ovi = Math.min(1, k * 3); fxo = W * 0.25 * ease(k / 1.2); mx = W * 0.38 - W * 0.12 * ease(k / 1.5); } }
-  if (st === 'mate') { mx = W * 0.38 + (fx - W * 0.38 - 18) * ease(dt / 1.5); my = fy - 6 * ease(dt / 1.5); }
-  fly(g, fx + fxo, fy, Math.PI, 2.0, { female: true, ovi, wing: role === 'female' && scene.songT >= 0 ? 0.35 * scene.wing : 0 });
-  const hisSong = role === 'male' && scene.songT >= 0, herSong = role === 'female' && scene.songT >= 0;
-  const singing = st === 'sing' || hisSong ? Math.max(0.6, scene.wing) : 0;
-  fly(g, mx, my, ma, 1.8, { wing: singing, legReach });
-  // pulse flashes on her side while she hears song
-  if (now - scene.pulseFlash < 80) { g.strokeStyle = 'rgba(255,104,186,.7)'; g.beginPath(); g.arc(fx + 30, fy, 60, 0, 7); g.stroke(); }
-  if (st === 'sing' && scene.songT >= 0) { g.strokeStyle = `rgba(255,104,186,${0.2 + 0.6 * scene.wing})`; for (let k = 1; k <= 3; k++) { g.beginPath(); g.arc(mx - 10, my - 40, k * 18 * (1 + scene.wing * 0.3), -1.2, 0.2); g.stroke(); } }
-  if (st === 'mate') { g.fillStyle = 'rgba(255,210,63,.9)'; g.fillRect(W * 0.2, H - 18, W * 0.6 * scene.mating, 4); g.strokeStyle = 'rgba(255,210,63,.4)'; g.strokeRect(W * 0.2, H - 18, W * 0.6, 4); }
+  const c = $('flies'), now = performance.now(), st = scene.stage;
+  const st2 = st === 'mate' && scene.mating >= 1 && scene.finished ? 'mate' : st;
+  maleStage(c.getContext('2d'), c.width, c.height, { stage: st2, bad: scene.bad, t: (now - scene.t0) / 1000, now, wing: scene.wing,
+    singing: scene.songT >= 0 && role === 'male', kickT: scene.kick ? (now - scene.kick) / 1000 : -1, mating: scene.mating,
+    finished: !!scene.finished, finishedT: scene.finished ? (now - scene.finished) / 1000 : 0 });
 }
-function loop() { if (!$('ritual').hidden) { drawFlies(); drawOsc(); idleMale(); } requestAnimationFrame(loop); }
+function loop() { if (!$('ritual').hidden) { if (role === 'male') { drawFlies(); drawOsc(); idleMale(); } else if (liveEar) liveEar.draw(); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 // for tools/nest-shot (headless checks of the chat window): ?test exposes the nest

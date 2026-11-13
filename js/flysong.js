@@ -84,7 +84,7 @@ export class FlySongDecoder {
       const hum = this.e[4], n = this.n++;
       this.floor = tot < this.floor ? this.floor * 0.999 + tot * 0.001 : this.floor * 0.99999 + tot * 0.00001;
       // a hum is sustained sine song: its band dominating for 20 ms on end (a pulse's leakage is too brief)
-      if (hum > 4 * tot && hum > 50 * this.floor) { if (++this.humRun > 0.02 * this.fs) this.humOn = n; } else this.humRun = 0;
+      if (hum > 4 * tot && hum > 50 * this.floor) { if (++this.humRun > 0.02 * this.fs) { this.humOn = n; if (n - (this.humEv || 0) > 0.01 * this.fs) { this.humEv = n; this.onEvent({ kind: 'hum', t: n / this.fs }); } } } else this.humRun = 0;
       const [p2, p1] = this.prev;
       if (p1 > p2 && p1 >= tot && p1 > 40 * this.floor && p1 > 1e-7 && p1 > 2 * hum && (n - 1 - this.lastPeak) > 0.018 * this.fs) {
         const den = p2 - 2 * p1 + tot, off = den !== 0 ? 0.5 * (p2 - tot) / den : 0;
@@ -94,10 +94,11 @@ export class FlySongDecoder {
       // a long silence ends whatever was being heard
       if (this.state !== 'search' && n / this.fs - this.lastT > 0.6) { this._finish(); }
     }
+    this.onEvent({ kind: 'time', t: this.n / this.fs });
   }
   _pulse(t, E, n) {
     const best = E.indexOf(Math.max(...E));
-    this.onEvent({ kind: 'pulse', car: best });
+    this.onEvent({ kind: 'pulse', car: best, t });
     // the first pulse after a hum starts a train (it carries no symbol); only the first
     const afterHum = (n - this.humOn) / this.fs < 0.068 && this.anchoredFor !== this.humOn;
     if (afterHum) this.anchoredFor = this.humOn;

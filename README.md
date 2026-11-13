@@ -14,7 +14,9 @@ Two phones may only share a secret once they have courted like fruit flies.
 6. Both phones down, a foot apart, speakers facing; quiet for about a minute while they sing to each other.
 7. If she accepts, a private chat opens on both: notes, photos, files. Leaving the page ends it; nothing is kept.
 
-A **Now** bar at the top of the ritual says what to do with your phone at each moment, and what to check if something fails.
+These steps live behind the **How to mate** button. A **Now** bar at the top of the ritual says what to do with your phone at each moment, and what to check if something fails.
+
+Each phone shows its own side. His shows a male *Drosophila* performing each step to the female in front of him: walking up (tripod gait), tapping her with a foreleg, extending one wing and vibrating it with the song, licking, mounting (`js/flyart.js`), with his courtship circuit below. Hers shows her FlyWire auditory network responding to everything he sings, live, then the courtship song she judges.
 
 ## The ritual
 

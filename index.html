@@ -43,14 +43,14 @@
       <span class="kicker">a secret passes only after a proper <i>Drosophila</i> courtship</span>
     </div>
   </div>
+  <button id="howBtn" class="howbtn" type="button">How to mate</button>
   <p class="tag">Dim the lights. Bring two phones close. He looks, he taps, he sings; if she likes the song, they're alone together.</p>
 </header>
 
-<main>
-  <section id="setup" class="card">
-    <details class="how" open>
-      <summary>How to court, step by step</summary>
-      <ol>
+<dialog id="how" class="howdlg" aria-labelledby="howT">
+  <form method="dialog"><button class="x" aria-label="Close">×</button></form>
+  <h2 id="howT">How to mate</h2>
+  <ol>
         <li><b>Two phones, one room.</b> Both open this page. Turn the volume up and the room down: no music, no talking during the songs.</li>
         <li><b>Agree on a passphrase out loud</b> (any short phrase, e.g. <i>fig wasp</i>). Both phones must type exactly the same thing. It's your species: a phone with a different one gets kicked.</li>
         <li><b>Pick parts.</b> The one sending is <b>♂ Court</b>; the one receiving is <b>♀ Be courted</b>.</li>
@@ -59,7 +59,11 @@
         <li><b>Then set both phones down</b> face up, a foot apart, speakers toward each other, and stay quiet. Everything from here is sung as fly song: his tap, his courtship song, her answer, and the way to your private chat. Allow about a minute.</li>
         <li><b>If she accepts,</b> a private chat opens on both phones: notes, photos, files. When either of you leaves the page, you're finished and nothing is kept.</li>
       </ol>
-    </details>
+  <form method="dialog"><button class="go">Got it</button></form>
+</dialog>
+<main>
+  <section id="setup" class="card">
+
     <div class="roles" role="radiogroup" aria-label="Your part in the ritual">
       <button id="roleMale" class="role" role="radio" aria-checked="true">
         <span class="sym">♂</span><span class="rt">Court</span><span class="rs">I'm sending</span>
@@ -92,12 +96,13 @@
       <p id="lookCap" class="lookcap"></p>
     </div>
     <div class="theatre">
-      <canvas id="flies" width="720" height="300" aria-label="The two flies"></canvas>
+      <canvas id="flies" width="720" height="480" aria-label="He courts her"></canvas>
       <p id="caption" class="caption" aria-live="polite"></p>
     </div>
 
     <div class="brains">
       <figure id="brainFemale" class="brain">
+        <p id="fCaption" class="fcaption" aria-live="polite"></p>
         <figcaption><b id="fTitle">Her ears and song pathway</b><span>FlyWire auditory network · 4,222 neurons, 1.35 M synapses</span></figcaption>
         <canvas id="fNet" width="720" height="460"></canvas>
         <div class="areas" id="fAreas"></div>
@@ -122,7 +127,7 @@
         <button id="noteSend" class="sendb" aria-label="Send">&#10148;</button>
       </div>
     </section>
-    <div class="row"><button id="again" class="ghost">Start over</button><span id="air" class="air"></span></div>
+    <div class="row"><button id="again" class="ghost">Start over</button><button id="howBtn2" class="ghost" type="button">How to mate</button><span id="air" class="air"></span></div>
   </section>
 </main>
 <footer>

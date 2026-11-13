@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>his stage</title>
+<style>body{background:#1a0610;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px} canvas{width:100%;background:#12040c;border-radius:8px}</style>
+<script type="module">
+// His stage at each step of the courtship (for checking the drawing).
+import { maleStage } from '../js/flyart.js';
+const steps = [['orient', { t: 1.2 }], ['tap', { t: 0.9 }], ['sing', { t: 1, singing: true, wing: 0.8 }], ['decide', { t: 1, bad: true, kickT: 0.5 }], ['mate', { t: 1.0, mating: 0.2 }], ['mate', { t: 4.5, mating: 0.8 }]];
+for (const [stage, o] of steps) { const c = document.createElement('canvas'); c.width = 720; c.height = 480; document.body.append(c);
+  maleStage(c.getContext('2d'), 720, 480, { stage, bad: false, wing: 0, singing: false, kickT: -1, mating: 0, finished: false, now: 1234, ...o }); }
+console.log('RESULT drawn');
+</script>
