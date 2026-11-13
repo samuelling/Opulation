@@ -12,7 +12,7 @@ import { shr, floorDiv } from './female.js';
 export function symbolsOf(tag) { const s = []; for (const b of tag) for (let k = 6; k >= 0; k -= 2) s.push((b >> k) & 3); return s; }
 export function tagOf(symbols) { const t = new Uint8Array(symbols.length >> 2); for (let i = 0; i < t.length; i++) t[i] = (symbols[4 * i] << 6) | (symbols[4 * i + 1] << 4) | (symbols[4 * i + 2] << 2) | symbols[4 * i + 3]; return t; }
 
-export const TRAINS = 4, PER_TRAIN = 16;
+export const TRAINS = 4, PER_TRAIN = 16, BOUT_GAP = 1.0;   // seconds of silence between two bouts of song
 /** schedule of pulses and hums, in ticks. pulses: {t, k} (k = symbol index the IPI *ending* at this pulse carries, -1 = anchor) */
 export function schedule(symbols, M) {
   const ipi = M.song.ipiTicks, pulses = [], hums = []; let t = 40;
@@ -149,7 +149,10 @@ export class SongDetector {
     }
   }
   _peak(t, e) {
-    // keep the stronger of two peaks closer than the refractory window (the first can be an echo's shoulder)
+    // a long silence (over BOUT_GAP; trains within one song are ~0.3 s apart) starts a new bout: a song half heard is
+    // dropped, never stitched onto the next one, so a male who repeats his song is always heard from its first note
+    if (this.lastT !== undefined && t - this.lastT > BOUT_GAP && this.trains.length) { this.trains = []; if (this.onBout) this.onBout(); }
+    this.lastT = t;
     this.cur.push(t); this.onPulse({ t, n: this.cur.length, train: this.trains.length });
   }
   _endTrain() {

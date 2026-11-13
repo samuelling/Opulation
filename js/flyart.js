@@ -118,7 +118,7 @@ export function maleStage(g, W, H, st) {
   let mx = W * 0.4, my = H * 0.52, ma = 0, walk = null, tapReach = 0, wingR = 0, vib = 0, proboscis = 0, curl = 0, ovi = 0, kick = 0, fxo = 0, antenna = Math.sin(st.now / 300) * 0.5;
   const t = st.t;
   // by sight: his dance, a pose per card (js/visual.js POSES), eased from one pose to the next
-  const stage = st.pose && !st.bad && (st.stage === 'tap' || st.stage === 'decide') ? 'dance' : st.stage;
+  const stage = st.pose && !st.bad && (st.stage === 'tap' || st.stage === 'sing' || st.stage === 'decide') ? 'dance' : st.stage;
   if (stage === 'dance') {
     const p = st.pose, k = 0.12; D.wing += (p.wing - D.wing) * k; D.side += (p.side - D.side) * k; D.tap += (p.tap - D.tap) * k; D.lick += (p.lick - D.lick) * k; D.curl += (p.curl - D.curl) * k;
     D.circ += ((p.name.startsWith('circles') ? 1 : 0) - D.circ) * 0.06;
@@ -127,9 +127,12 @@ export function maleStage(g, W, H, st) {
     walk = D.circ > 0.05 && D.circ < 0.95 ? st.now / 70 : null;
     const both = 1 - Math.min(1, Math.abs(D.side));                // scissoring: both wings
     wingR = D.wing * Math.max(both, Math.max(0, D.side)); const wingL = D.wing * Math.max(both, Math.max(0, -D.side));
-    vib = st.pose.name.includes('pulse') ? Math.sin(st.now / 4) * 0.12 : 0; tapReach = D.tap * (0.5 + 0.5 * Math.sin(t * 10)); proboscis = D.lick; curl = D.curl;
+    if (st.singing) { wingR = Math.max(wingR, 0.9 * (D.side >= 0)); }   // singing: one wing out and buzzing, whatever the pose
+    vib = st.singing ? Math.sin(st.now / 4) * 0.08 + 0.12 * st.wing : st.pose.name.includes('pulse') ? Math.sin(st.now / 4) * 0.12 : 0; tapReach = D.tap * (0.5 + 0.5 * Math.sin(t * 10)); proboscis = D.lick; curl = D.curl;
     fly(g, fx, fy, 0, S * 1.05, { female: true });
-    fly(g, mx, my, ma, S, { wingR, wingL, vib, walk, tapReach, proboscis, curl, antenna });
+    fly(g, mx, my, ma, S, { wingR, wingL: st.singing && D.side < 0 ? Math.max(wingL, 0.9) : wingL, vib, walk, tapReach, proboscis, curl, antenna });
+    if (st.singing) { g.strokeStyle = `rgba(255,104,186,${0.25 + 0.6 * st.wing})`; g.lineWidth = 2;
+      for (let k = 1; k <= 4; k++) { g.beginPath(); g.arc(mx - 2 * S, my - 30 * S, k * 9 * S * (1 + st.wing * 0.2), -1.0, 0.5); g.stroke(); } }
     return;
   }
   switch (stage) {

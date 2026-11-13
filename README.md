@@ -34,12 +34,12 @@ Each phone shows its own side. His shows a male *Drosophila* performing each ste
 
 In **Sight & song** the slow turns go by sight instead, as a fruit fly's version of a QR code, and only the key song is sung (`js/visual.js`). Each phone plays a loop of cards at the bottom of its screen, four a second, and reads the other's with its front camera:
 
-- **Her eyes** (coarse facets: 18 bytes a card) show her half of the key exchange, then a sign that she has his dance, then her answer: accept plus the sealed reply for the nest, or a kick.
+- **Her eyes** (coarse facets: 18 bytes a card) show her half of the key exchange, then a sign that she has his dance and is listening, then her answer: accept plus the sealed reply for the nest, or a kick.
 - **His wing** (his extended wing, magnified, the data in its hair field: 20 bytes a card) carries his tap and the sealed way to their nest. Each card is a pose of his courtship, from real *melanogaster* behaviour: he orients, taps her with a foreleg, extends his left wing, vibrates it (pulse song), circles to her other side, extends his right wing, scissors both wings, licks her genitalia, curls his abdomen. His fly performs each pose on his screen as its card plays.
 - Every card is Reed-Solomon checked on its own and carries its place in the message, so the camera can catch them in any order. One extra card is the XOR of the rest, so a card the camera missed is rebuilt instead of waited for. The reader finds the four landmark dots at any rotation and in a mirrored view, so the phones can meet either way up.
-- Then he sings his key song out loud, as above, and her FlyWire network judges it. The song stays the proof; sight just carries the bulk.
+- **He sings while he dances**, as real males do: his key song starts the moment he has seen her, in bouts, until her eyes answer. Her phone can't judge a song before it has his tap (it doesn't yet know which song to want), so it keeps every whole bout it hears; once his dance gives her the key, her FlyWire network hears the latest bout again, replayed at double speed from that memory, and judges it. A bout heard only in part is dropped, never stitched to the next. The song stays the proof; sight carries the bulk.
 
-Altogether about ten seconds, against about a minute by sound. It needs both front cameras and a lit screen, and it has been tested between two headless browsers (`tools/sight-test.py`), not yet between two real phones: the best distance may need tuning.
+Altogether about eight seconds, against about a minute by sound. It needs both front cameras and a lit screen, and it has been tested between two headless browsers (`tools/sight-test.py`), not yet between two real phones: the best distance may need tuning.
 
 After a rejection she won't show herself for a while (10 s, doubling up to 10 min): courtship conditioning, and a brake on anyone guessing passphrases.
 

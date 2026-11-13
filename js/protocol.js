@@ -13,7 +13,8 @@
 // Sight and song (screen to screen, front cameras; js/visual.js): the same turns, but everything except the key
 // song goes by sight, as loops of cards, which is many times faster than sound:
 //   her eyes:  LOOK                          his wing (the dance):  TAP + sealed OFFER
-//   her eyes:  SEEN (she has his dance; he may sing)          then he sings the key song, by sound, as before
+//   (he sings the key song, by sound, while he dances, in bouts; she keeps what she hears and judges it once she has his tap)
+//   her eyes:  SEEN (she has his dance and is judging)
 //   her eyes:  ACCEPT + sealed ANSWER, or KICK
 //
 // Every sound turn is sung as fly song (js/flysong.js). The gift and the link messages are sealed with

@@ -365,26 +365,26 @@ async function maleSight(pass, giftText, r) {
   const keys = him.keys, sy = Song.symbolsOf(keys.tagM), sch = Song.schedule(sy, M);
   const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
   const snaps = []; const L = new Song.Listener(brain, sy, M); L.onFrame = (st, b) => snaps.push({ st, r: snapR(b) }); L.advance(sy, true);
-  const o = await offerP;
-  // his dance: his tap and the way to their nest (sealed), in his wing, a pose per card
-  stage('tap'); scene.tastes = 1;
-  sight.show(V.pair(P.tap(lk.sid, him.Yb), o ? P.sealFixed(P.T.OFFER, lk.sid, keys, o.blob) : undefined), V.MAGIC.DANCE, 'wing', (k, n) => {
-    const p = V.POSES[k % V.POSES.length]; scene.pose = p; scene.tastes = p.tap || p.lick ? 1 : 0.3; sightCap(`He ${p.name} · ${k + 1}/${n}`); if (scene.stage === 'tap') caption(`He dances: he ${p.name}. His wing carries his tap and the way to their nest.`); });
-  todo('He dances for her. ' + HOLD); air('dancing…');
-  let verdict = null, ab = null;
-  for (let tries = 0; tries < 3 && !verdict && alive(r); tries++) {
-    // she shows him she has his dance; then he sings, and she answers with her eyes
-    const got = await sight.watch('eyes', [V.MAGIC.SEEN, V.MAGIC.ANSWER], (m) => m.magic === V.MAGIC.ANSWER ? m : P.parseSeen(m.bytes, lk.sid) ? m : null, tries ? 20000 : 60000, r, { view });
-    if (!alive(r)) return; if (!got) break;
-    let reply = got;
-    if (got.magic === V.MAGIC.SEEN) {
-      stage('sing'); caption('She lets him near. He extends one wing and sings: sine song, then pulse song. The song is his key, proven.');
-      todo('He sings: keep still and quiet. ' + HOLD); await singKey(sch, snaps);
-      stage('decide'); caption('She decides.'); air('waiting for her…'); todo('She decides… keep holding.');
-      reply = await sight.watch('eyes', V.MAGIC.ANSWER, (m) => m, 14000, r, { view });
-    }
-    if (reply) { const [vb, a] = V.unpair(reply.bytes) || []; verdict = vb && P.parseVerdict(vb, lk.sid, keys); ab = a; }
+  // he dances and sings at once, as real males do: the dance carries his tap and the way to their nest (sealed),
+  // the song proves his key. He repeats his song in bouts until her eyes answer.
+  stage('sing'); caption('He dances and sings at once.'); todo('He dances and sings: keep still and quiet. ' + HOLD);
+  const dance = (o) => sight.show(V.pair(P.tap(lk.sid, him.Yb), o ? P.sealFixed(P.T.OFFER, lk.sid, keys, o.blob) : undefined), V.MAGIC.DANCE, 'wing', (k, n) => {
+    const p = V.POSES[k % V.POSES.length]; scene.pose = p; sightCap(`He ${p.name} · ${k + 1}/${n}`); });
+  let o = null; const offered = offerP.then((x) => { o = x; if (alive(r)) dance(x); });   // usually ready already: gathering began before he saw her
+  await Promise.race([offered, sleep(400)]); if (!o) dance(null);   // don't hold the song for it; the dance switches when it's ready
+  let seen = false, verdict = null, ab = null;
+  const replyP = sight.watch('eyes', [V.MAGIC.SEEN, V.MAGIC.ANSWER], (m) => {
+    if (m.magic === V.MAGIC.SEEN) { if (!seen && P.parseSeen(m.bytes, lk.sid)) { seen = true; caption('She has his dance, and she listens.'); } return null; }
+    return m; }, 60000, r, { view });
+  let reply = null;
+  for (let bout = 0; bout < 8 && !reply && alive(r); bout++) {
+    air(`singing${bout ? ' again' : ''} (3.7 s)…`); await singKey(sch, snaps);
+    if (!alive(r)) return;
+    stage('decide'); air('waiting for her…');
+    reply = await Promise.race([replyP, sleep(seen ? 6000 : 1600).then(() => undefined)]);   // between bouts, a pause (and her eyes, if she has answered)
+    if (reply === null) break; if (reply === undefined) { reply = null; stage('sing'); }
   }
+  if (reply) { const [vb, a] = V.unpair(reply.bytes) || []; verdict = vb && P.parseVerdict(vb, lk.sid, keys); ab = a; }
   if (!alive(r)) return;
   if (verdict !== 'accept') {
     sight.stop(); stage('decide', true); if (verdict === 'kick') scene.kick = performance.now(); air('');
@@ -413,26 +413,24 @@ async function femaleSight(pass, r) {
     const wait = memory.refractory();
     if (wait > 0) { sight.show(new Uint8Array(0), 0, 'eyes'); sightCap(`Wary: ${Math.ceil(wait / 1000)} s`); caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); todo(`Wait ${Math.ceil(wait / 1000)} s. Meanwhile, double-check the passphrase with him.`); await sleep(1000); continue; }
     const her = new C.Initiator(pass);
-    liveEar = new LiveEar(null);
+    liveEar = new LiveEar(null); const tape = new SongTape();
     sight.show(P.look(her), V.MAGIC.LOOK, 'eyes', (k, n) => sightCap(`Her eyes · ${k + 1}/${n}`));
     caption('She waits to be seen.'); air('watching for him…'); todo(HOLD + ' Her eyes are showing him her half of the key.');
     const dn = await sight.watch('wing', V.MAGIC.DANCE, (m) => { const pr = V.unpair(m.bytes), t = pr && P.parseTap(pr[0], her.sid); return t ? { t, off: pr[1] } : null; }, 3600000, r,
-      { onProgress: (f) => { if (f > 0) { stage('tap'); caption('He dances for her.'); air(`watching him dance ${Math.round(100 * f)}%`); } } });
-    if (!alive(r) || !dn) return;
-    let keys; try { keys = her.finish(dn.t.Yb); } catch (e) { caption('That was not a fly.'); continue; }
+      { onProgress: (f) => { if (f > 0) { stage('sing'); caption('He dances and sings for her.'); air(`watching him dance ${Math.round(100 * f)}%`); } } });
+    if (!alive(r) || !dn) { tape.stop(); return; }
+    let keys; try { keys = her.finish(dn.t.Yb); } catch (e) { tape.stop(); caption('That was not a fly.'); continue; }
     scene.sees = 1; scene.tastes = 1;
-    // his offer only opens if he is her kind; she starts answering it while she listens (it is only sent if she accepts)
+    // his offer only opens if he is her kind; she starts answering it while she judges (it is only sent if she accepts)
     const offer = dn.off.length ? P.unsealFixed(P.T.OFFER, dn.off, her.sid, keys) : null;
     const answerP = offer && window.RTCPeerConnection ? Link.answer(offer).catch(() => null) : Promise.resolve(null);
     sight.show(P.seen(her.sid), V.MAGIC.SEEN, 'eyes'); sightCap('She lets him near…');
+    caption('She has his dance; now she knows the song she wants. She judges his.');
     const expected = Song.symbolsOf(keys.tagM);
-    let result = 'nothing';
-    for (let tries = 0; tries < 3 && result === 'nothing' && alive(r); tries++) {
-      const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
-      const L = new Song.Listener(brain, expected, M), queue = []; L.onFrame = (st, b) => queue.push({ st, r: snapR(b) });
-      stage('sing'); caption('She listens for his song.'); air('listening for song…'); resetNotes(); todo('He sings: keep still and quiet. ' + HOLD);
-      trace('listen'); liveEar = null; result = await hearSong(L, queue, expected, r); liveEar = new LiveEar(keys.seed); trace('heard ' + result + ' frames ' + queue.length);
-    }
+    const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
+    const L = new Song.Listener(brain, expected, M), queue = []; L.onFrame = (st, b) => queue.push({ st, r: snapR(b) });
+    resetNotes(); liveEar = null; trace('judge, bouts on tape ' + tape.bouts.length);
+    const result = await judgeTape(tape, L, queue, r, 15000); tape.stop(); liveEar = new LiveEar(keys.seed); trace('heard ' + result);
     if (!alive(r)) return;
     const accepted = result === 'accept';
     stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : result === 'nothing' ? 'She heard no song.' : 'Wrong notes. She kicks and runs.');
@@ -517,6 +515,42 @@ function hearSong(L, queue, expected, r) {
       if (finished && !start) start = performance.now();
       if (start) { const want = Math.min(queue.length - 1, Math.floor((performance.now() - start) / 5)); while (k <= want) { const q = queue[k]; showFemale(q.st, q.r, false, k < want); k++; } }   // draw only the latest; tick the notes for the rest
       if (finished && k >= queue.length) { listeners.delete(l); clearTimeout(giveUp); return res(heard.length ? (L.verdict || 'reject') : 'nothing'); }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+// By sight and song he sings while he dances, before she has his tap (and so before she knows what song to expect).
+// Her phone keeps every whole bout she hears; once his dance gives her the key, her brain hears the latest bout
+// again, replayed from her memory of it, and judges it, or waits for his next bout.
+class SongTape {
+  constructor() {
+    this.bouts = []; this.trains = 0; this.ring = performance.now();
+    this.det = new Song.SongDetector(M, ctx.sampleRate, ({ symbols }) => { this.bouts.push({ symbols, at: performance.now() }); this.trains = 0; },
+      () => { scene.pulseFlash = performance.now(); ring(); });
+    this.det.onTrain = (syms, n) => { this.trains = n; }; this.det.onBout = () => { this.trains = 0; };
+    this.l = (x) => this.det.push(x); listeners.add(this.l);
+  }
+  stop() { listeners.delete(this.l); }
+}
+function judgeTape(tape, L, queue, r, ms = 14000) {
+  return new Promise((res) => {
+    const t0 = performance.now(), had = tape.bouts.length; let start = 0, k = 0, fast = false;
+    const tick = () => {
+      if (!alive(r)) return res('nothing');
+      if (!start) {
+        const b = tape.bouts[tape.bouts.length - 1];
+        if (b) { L.advance(b.symbols, true); fast = had > 0; start = performance.now(); }   // a bout heard before she had his key: replayed at double speed
+        else if (performance.now() - t0 > ms) return res('nothing');
+        else air(tape.trains ? `hearing his song… ${tape.trains}/${Song.TRAINS}` : 'listening for his song…');
+      }
+      if (start) {
+        air(fast ? 'she hears it again, in her head…' : 'she hears it…');
+        const want = Math.min(queue.length - 1, Math.floor((performance.now() - start) / (fast ? 2.5 : 5)));
+        while (k <= want) { const q = queue[k]; showFemale(q.st, q.r, false, k < want); k++; }
+        if (k >= queue.length) return res(L.verdict || 'reject');
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

@@ -53,16 +53,17 @@ export async function sightRitual(S, parts, herPass, hisPass) {
   const her = new C.Initiator(herPass);
   const lk = watch(P.look(her), V.MAGIC.LOOK, 'eyes'); const seen = lk && P.parseLook(lk.bytes); if (!seen) return 'blind'; log.push(lk.cards);
   const him = C.respond(hisPass, seen.sid, seen.Ya), blob = new Uint8Array(82).fill(7);
+  // he sings while he dances: her phone hears a whole bout before it can read his tap, and judges it afterwards
+  const sch = Song.schedule(Song.symbolsOf(him.keys.tagM), M), air = room(Song.renderAir(sch, M, FS)), bouts = [];
+  const det = new Song.SongDetector(M, FS, ({ symbols }) => bouts.push(symbols));
+  for (let i = 0; i < air.length; i += 2048) det.push(air.subarray(i, i + 2048)); det.flush();
   const dn = watch(V.pair(P.tap(seen.sid, him.Yb), P.sealFixed(P.T.OFFER, seen.sid, him.keys, blob)), V.MAGIC.DANCE, 'wing'); if (!dn) return 'dance unseen'; log.push(dn.cards);
   const [tapB, offB] = V.unpair(dn.bytes), t = P.parseTap(tapB, her.sid); if (!t) return 'tap lost';
   // (with the wrong passphrase she can't open his offer; she still lets her brain judge his song, as with sound)
   const keys = her.finish(t.Yb), offer = P.unsealFixed(P.T.OFFER, offB, her.sid, keys);
-  const sn = watch(P.seen(her.sid), V.MAGIC.SEEN, 'eyes', [V.MAGIC.SEEN, V.MAGIC.ANSWER]); if (!sn || !P.parseSeen(sn.bytes, seen.sid)) return 'not seen';
-  const sch = Song.schedule(Song.symbolsOf(him.keys.tagM), M), air = room(Song.renderAir(sch, M, FS));
+  if (!bouts.length) return 'song unheard';
   const L = new Song.Listener(new FemaleBrain(parts.meta, parts.bin, M, personality(S, keys.seed, parts.meta.n)), Song.symbolsOf(keys.tagM), M);
-  const heard = []; let done = false;
-  const det = new Song.SongDetector(M, FS, () => {}); det.onTrain = (s, n) => { heard.push(...s); if (n >= Song.TRAINS) { L.advance(heard.slice(), true); done = true; } else L.advance(heard.slice(), false); };
-  for (let i = 0; i < air.length; i += 2048) det.push(air.subarray(i, i + 2048)); det.flush(); if (!done) L.advance(heard.slice(), true);
+  L.advance(bouts[bouts.length - 1], true);
   if (L.verdict === 'accept' && (!offer || offer.length !== 82)) return 'offer lost';
   const reply = L.verdict === 'accept' ? V.pair(P.accept(her.sid, keys), P.sealFixed(P.T.ANSWER, her.sid, keys, blob)) : V.pair(P.kick(her.sid));
   const an = watch(reply, V.MAGIC.ANSWER, 'eyes'); if (!an) return 'reply unseen'; log.push(an.cards);
@@ -75,6 +76,12 @@ export async function run(ok, S) {
   const parts = loadBrainParts();
   const a = await ritual(S, parts, 'fig wasp', 'fig wasp'); ok(a === 'mated: a fig, ripe', `same passphrase, through camera and room: ${a}`);
   const b = await ritual(S, parts, 'fig wasp', 'fig wasps'); ok(b === 'reject/kick', `different passphrase: ${b}`);
+  { // she starts listening mid-song: that half bout is dropped, and his next bout is heard whole
+    const sy = Song.symbolsOf(S.randombytes_buf(16)), x = Song.renderAir(Song.schedule(sy, parts.M), parts.M, FS), cut = Math.floor(1.4 * FS);
+    const a = new Float32Array((x.length - cut) + 2 * FS + x.length); a.set(x.subarray(cut), 0); a.set(x, x.length - cut + 2 * FS);
+    const bouts = [], det = new Song.SongDetector(parts.M, FS, ({ symbols }) => bouts.push(symbols));
+    for (let i = 0; i < a.length; i += 2048) det.push(a.subarray(i, i + 2048)); det.flush();
+    ok(bouts.length === 1 && bouts[0].every((v, i) => v === sy[i]), `a half-heard bout is dropped, the next is heard whole (${bouts.length} bout)`); }
   const c = await sightRitual(S, parts, 'fig wasp', 'fig wasp'); ok(c.startsWith('mated'), `by sight and song, same passphrase: ${c}`);
   const d = await sightRitual(S, parts, 'fig wasp', 'fig wasps'); ok(d === 'reject/kick', `by sight and song, different passphrase: ${d}`);
 }
