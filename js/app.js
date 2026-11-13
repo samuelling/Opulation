@@ -6,6 +6,7 @@ import { FemaleBrain, personality } from './female.js';
 import { MaleCircuit, NODES, EDGES } from './male.js';
 import * as Sung from './flysong.js';
 import * as F from './flycode.js';
+import * as V from './visual.js';
 import * as Link from './link.js';
 import { FlyEye } from './eye.js';
 import { maleStage } from './flyart.js';
@@ -30,6 +31,11 @@ function setRole(r) {
   $('giftField').hidden = r !== 'male'; $('go').textContent = r === 'male' ? 'Begin courtship' : 'Wait to be courted';
 }
 $('roleMale').onclick = () => setRole('male'); $('roleFemale').onclick = () => setRole('female');
+// how they court: screen to screen by sight (the cards) with the key song by sound, or everything by sound
+let mode = 'sight';
+function setMode(m) { mode = m; $('modeSight').setAttribute('aria-checked', String(m === 'sight')); $('modeSong').setAttribute('aria-checked', String(m === 'song')); try { localStorage.setItem('opulation.mode', m); } catch (e) {} }
+$('modeSight').onclick = () => setMode('sight'); $('modeSong').onclick = () => setMode('song');
+try { const m = localStorage.getItem('opulation.mode'); if (m === 'song' || m === 'sight') setMode(m); } catch (e) {}
 try { const p = localStorage.getItem('opulation.pass'); if (p) $('pass').value = p; } catch (e) {}
 const memory = new P.Memory({ get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } });
 $('go').onclick = async () => {
@@ -42,9 +48,10 @@ $('go').onclick = async () => {
   $('setup').hidden = true; $('ritual').hidden = false; resetNest(); window.scrollTo({ top: $('ritual').offsetTop - 8, behavior: 'smooth' });
   run = { id: Math.random() };
   if (role === 'male' && !eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }   // his optic lobe takes ~2 s to wake
-  if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
+  if (mode === 'sight') { if (role === 'male') maleSight(pass, $('gift').value.trim(), run); else femaleSight(pass, run); }
+  else if (role === 'male') maleFlow(pass, $('gift').value.trim(), run); else femaleFlow(pass, run);
 };
-$('again').onclick = () => { document.body.classList.remove('male', 'female'); run = null; stopListening(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
+$('again').onclick = () => { document.body.classList.remove('male', 'female'); run = null; stopListening(); sight.stop(); $('look').hidden = true; closeNest(); $('ritual').hidden = true; $('setup').hidden = false; $('go').disabled = false; resetScene(); };
 const openHow = () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); };
 $('howBtn').onclick = openHow; $('howBtn2').onclick = openHow;
 const showSetupMsg = (t) => { $('setupMsg').textContent = t; $('setupMsg').hidden = false; };
@@ -71,6 +78,7 @@ function play(x, onTime) {
   const buf = ctx.createBuffer(1, x.length, FS); buf.copyToChannel(x, 0);
   const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
   const dur = x.length / FS, t0 = ctx.currentTime + 0.05; ignoreUntil = performance.now() + (dur + 0.35) * 1000;
+  if (window.__opul) window.__opul.played.push(x);
   src.start(t0);
   return new Promise(res => {
     const tick = () => { const t = ctx.currentTime - t0; if (onTime) onTime(Math.max(0, t)); if (t >= dur) { ignoreUntil = performance.now() + 300; res(); } else requestAnimationFrame(tick); };
@@ -267,6 +275,190 @@ async function femaleFlow(pass, r) {
   }
 }
 
+// ---------------------------------------------------------------- by sight: screen to screen, front cameras
+// Each phone shows a loop of cards at the bottom of its screen and reads the other's with its front camera. Held
+// head to tail, a hand apart, each camera sits over the other phone's cards. Only the key song goes by sound.
+const sight = {
+  stream: null, cards: null, kind: 'eyes', i: 0, timer: 0, pose: null,
+  async start() {
+    $('sight').hidden = false; document.body.classList.add('sighted');
+    // the top of the screen shows the courtship (his fly, or her brain) for anyone peeking; the cards fill the bottom
+    setTimeout(() => (role === 'male' ? document.querySelector('.theatre') : $('brainFemale')).scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (this.stream || window.__opul) return true;
+    try { this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+    catch (e) { return false; }
+    const v = $('fcam'); v.srcObject = this.stream; await v.play().catch(() => {}); return true;
+  },
+  /** play a loop of cards, about four a second (his: each card a pose of his dance) */
+  show(bytes, magic, kind, onCard) {
+    clearInterval(this.timer); this.kind = kind; this.i = 0;
+    this.cards = V.cards(bytes, magic, kind).map(c => F.facetBits(c, kind));
+    const g = $('card').getContext('2d');
+    const tick = () => { const k = this.i++ % this.cards.length; F.drawCanvas(g, this.cards[k], 1000, { kind }); if (onCard) onCard(k, this.cards.length); };
+    tick(); this.timer = setInterval(tick, 250);
+  },
+  /** one camera frame, as grey, at up to 960 px wide */
+  frame(work) {
+    if (window.__opul) return window.__opul.camFeed();
+    const v = $('fcam'), vw = v.videoWidth, vh = v.videoHeight; if (!vw) return null;
+    const w = Math.min(960, vw), h = Math.round(w * vh / vw); work.width = w; work.height = h;
+    const wg = work.getContext('2d', { willReadFrequently: true }); wg.drawImage(v, 0, 0, w, h); return { rgba: wg.getImageData(0, 0, w, h).data, w, h };
+  },
+  /** read the other phone's cards until `accept(message)` returns something (or `ms` passes) */
+  async watch(kind, magics, accept, ms, r, { onProgress, view } = {}) {
+    const A = new V.Assembler(magics), work = document.createElement('canvas'), until = performance.now() + ms;
+    while (alive(r) && performance.now() < until) {
+      await sleep(70); const fr = this.frame(work); if (!fr) continue;
+      const res = F.read(F.toGrey(fr.rgba, fr.w, fr.h), fr.w, fr.h, kind);
+      if (view) view(fr, res, kind);
+      if (!res || !res.payload) continue;
+      const m = A.push(res.payload); if (onProgress) onProgress(A.progress, A.magic);
+      if (m) { const v = accept(m); if (v) return v; A.reset(); }
+    }
+    return null;
+  },
+  stop() { clearInterval(this.timer); this.timer = 0; scene.pose = null; if (this.stream) this.stream.getTracks().forEach(t => t.stop()); this.stream = null; $('sight').hidden = true; document.body.classList.remove('sighted'); },
+};
+const trace = (t) => { if (window.__opul) console.warn(`t=${(performance.now() / 1000).toFixed(1)} ${t}`); };
+const sightCap = (t) => { $('sightCap').textContent = t; };
+$('sightX').onclick = () => $('again').click();
+/** what his camera sees (and his fly eye makes of it), with the facets he reads lit up */
+function viewFor() {
+  const view = $('camView'), g = view.getContext('2d'); let lcMax = 1e-3;
+  return (fr, res, kind) => {
+    view.width = fr.w; view.height = fr.h; g.putImageData(new ImageData(new Uint8ClampedArray(fr.rgba), fr.w, fr.h), 0, 0);
+    g.fillStyle = 'rgba(18,11,23,.35)'; g.fillRect(0, 0, fr.w, fr.h);
+    if (eye && eye.meta && !eye._wait) { eye.sample(fr.rgba, fr.w, fr.h); eye.step(2).then((Lz) => { if (!Lz) return; eye.draw($('flyEye'), Lz); lcMax = Math.max(lcMax * 0.995, Lz.lc10, 1e-3); scene.sees = Math.max(scene.sees, Math.min(1, Lz.lc10 / lcMax)); }); }
+    if (!res || !res.finders) return;
+    const Lc = F.layout(kind).cells, H = res.Hm;
+    for (let i = 0; i < Lc.length; i++) { const z = H[6] * Lc[i].x + H[7] * Lc[i].y + H[8], x = (H[0] * Lc[i].x + H[1] * Lc[i].y + H[2]) / z, y = (H[3] * Lc[i].x + H[4] * Lc[i].y + H[5]) / z;
+      g.fillStyle = res.bits[i] ? 'rgba(255,104,186,.95)' : 'rgba(255,210,63,.55)'; g.fillRect(x - 2, y - 2, 4, 4); }
+    g.strokeStyle = res.payload ? '#ffb547' : 'rgba(255,181,71,.4)'; g.lineWidth = 2; for (const b of res.finders) { g.beginPath(); g.arc(b.x, b.y, b.r + 4, 0, 7); g.stroke(); }
+  };
+}
+const HOLD = 'Hold the phones screen to screen, head to tail (one upside down), about a hand apart. Brightness up; keep them still.';
+
+/** his key song, with her brain as his phone predicts it */
+async function singKey(sch, snaps) {
+  air('singing (3.7 s)…'); resetNotes(); oscSet(Song.renderTrue(sch, M, 4000), 4000);
+  let shown = -1;
+  await play(Song.renderAir(sch, M, FS), (t) => { scene.songT = t; driveMale(sch, t); const k = Math.min(snaps.length - 1, Math.floor(t / 0.005));
+    while (shown < k) { shown++; showFemale(snaps[shown].st, snaps[shown].r, true, shown < k); } });
+  scene.songT = -1;
+}
+
+async function maleSight(pass, giftText, r) {
+  $('brainMale').classList.remove('dim'); $('fTitle').textContent = 'Her, as his phone predicts her';
+  if (!eye) { eye = new FlyEye(); eye.ready.catch((e) => console.warn('fly eye', e)); }
+  const offerP = window.RTCPeerConnection ? Link.offer().catch(() => null) : Promise.resolve(null);   // the way to the nest, ready before he needs it
+  stage('orient'); caption('He looks for her.'); air('');
+  $('look').hidden = false; $('face').hidden = true; $('cam').hidden = false; $('lookCap').textContent = 'What his front camera sees of her screen, and what his own eye makes of it.';
+  if (!await sight.start()) { todo('He needs the camera to see her: allow camera access for this page, then Start over. (Or choose Song only.)', true); sight.stop(); return; }
+  // until he has seen her, his own card is plain: his wing, still
+  sight.show(new Uint8Array(0), 0, 'wing'); sightCap('He looks for her…');
+  todo(HOLD + ' His phone is looking for her face.');
+  const view = viewFor();
+  const lk = await sight.watch('eyes', V.MAGIC.LOOK, (m) => P.parseLook(m.bytes), 90000, r, { view, onProgress: (f) => sightCap(`He glimpses her… ${Math.round(100 * f)}%`) });
+  if (!alive(r)) return; if (!lk) { sight.stop(); caption('He never saw her.'); todo('His camera couldn\'t read her screen. Brightness up on hers, a hand apart, head to tail, and Start over on both. (Or choose Song only.)', true); return; }
+  scene.sees = 1; caption('He sees her, turns toward her, and dances.');
+  let him; try { him = C.respond(pass, lk.sid, lk.Ya); } catch (e) { caption('That was not a fly.'); sight.stop(); return; }
+  const keys = him.keys, sy = Song.symbolsOf(keys.tagM), sch = Song.schedule(sy, M);
+  const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
+  const snaps = []; const L = new Song.Listener(brain, sy, M); L.onFrame = (st, b) => snaps.push({ st, r: snapR(b) }); L.advance(sy, true);
+  const o = await offerP;
+  // his dance: his tap and the way to their nest (sealed), in his wing, a pose per card
+  stage('tap'); scene.tastes = 1;
+  sight.show(V.pair(P.tap(lk.sid, him.Yb), o ? P.sealFixed(P.T.OFFER, lk.sid, keys, o.blob) : undefined), V.MAGIC.DANCE, 'wing', (k, n) => {
+    const p = V.POSES[k % V.POSES.length]; scene.pose = p; scene.tastes = p.tap || p.lick ? 1 : 0.3; sightCap(`He ${p.name} · ${k + 1}/${n}`); if (scene.stage === 'tap') caption(`He dances: he ${p.name}. His wing carries his tap and the way to their nest.`); });
+  todo('He dances for her. ' + HOLD); air('dancing…');
+  let verdict = null, ab = null;
+  for (let tries = 0; tries < 3 && !verdict && alive(r); tries++) {
+    // she shows him she has his dance; then he sings, and she answers with her eyes
+    const got = await sight.watch('eyes', [V.MAGIC.SEEN, V.MAGIC.ANSWER], (m) => m.magic === V.MAGIC.ANSWER ? m : P.parseSeen(m.bytes, lk.sid) ? m : null, tries ? 20000 : 60000, r, { view });
+    if (!alive(r)) return; if (!got) break;
+    let reply = got;
+    if (got.magic === V.MAGIC.SEEN) {
+      stage('sing'); caption('She lets him near. He extends one wing and sings: sine song, then pulse song. The song is his key, proven.');
+      todo('He sings: keep still and quiet. ' + HOLD); await singKey(sch, snaps);
+      stage('decide'); caption('She decides.'); air('waiting for her…'); todo('She decides… keep holding.');
+      reply = await sight.watch('eyes', V.MAGIC.ANSWER, (m) => m, 14000, r, { view });
+    }
+    if (reply) { const [vb, a] = V.unpair(reply.bytes) || []; verdict = vb && P.parseVerdict(vb, lk.sid, keys); ab = a; }
+  }
+  if (!alive(r)) return;
+  if (verdict !== 'accept') {
+    sight.stop(); stage('decide', true); if (verdict === 'kick') scene.kick = performance.now(); air('');
+    if (verdict === 'wrongkind') { caption('She accepts, but her pheromone tastes wrong: another species (another passphrase). He leaves.'); todo('The passphrases don\'t match. Check you both typed exactly the same, then tap Start over on both phones.', true); return; }
+    caption(verdict === 'kick' ? 'She kicks him away.' : 'No answer from her.');
+    todo(verdict === 'kick' ? 'She rejected the song: usually a different passphrase, or too much noise. Check the passphrase, then Start over on both phones.' : 'Nothing from her. Brightness up, a hand apart, quieter room, then Start over on both. (Or choose Song only.)', true); return;
+  }
+  stage('mate'); caption('She slows and opens, and she tastes right. They mate.'); air('connecting…'); todo('She accepted. Keep holding a moment while the private chat opens.');
+  sightCap('She accepted. Connecting…'); scene.mating = 0.5;
+  let link = null;
+  const ans = ab && ab.length ? P.unsealFixed(P.T.ANSWER, ab, lk.sid, keys) : null;
+  if (o && ans) { try { await Link.complete(o.pc, ans); if (await Link.open(o.dc)) link = o; } catch (e) { console.warn(e); } }
+  sight.stop(); if (!alive(r)) return;
+  scene.mating = 1; memory.mated(lk.sid);
+  if (link) { openNest(link.dc, giftText); caption('Mated. The nest is open: send her photos and files.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
+  if (giftText) { todo('No direct link opened, so he sings his note instead: phones close, quiet.'); await playFrame(P.gift(lk.sid, keys, { kind: 'text', text: giftText }), (t, end) => air(`singing the note ${Math.round(100 * Math.min(1, t / end))}%`)); }
+  resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones (are they on networks that can reach each other?).' + (giftText ? ' Your note went by sound.' : '')); if (giftText) addItem({ dir: 'out', kind: 'note', text: giftText }); nestStatus('by sound only', false);
+  caption('Mated, but the nest would not open.'); air('mated'); todo('The phones couldn\'t link directly (often different or strict networks). Try both on the same Wi-Fi and Start over.', true);
+}
+
+async function femaleSight(pass, r) {
+  $('brainMale').classList.add('dim'); $('fTitle').textContent = 'Her ears and song pathway';
+  if (!await sight.start()) { todo('She needs the front camera to watch him dance: allow camera access for this page, then Start over. (Or choose Song only.)', true); sight.stop(); return; }
+  while (alive(r)) {
+    stage('orient'); resetNotes(); air(''); $('look').hidden = true;
+    const wait = memory.refractory();
+    if (wait > 0) { sight.show(new Uint8Array(0), 0, 'eyes'); sightCap(`Wary: ${Math.ceil(wait / 1000)} s`); caption(`After that wrong song she is wary: she won't show herself for another ${Math.ceil(wait / 1000)} s.`); todo(`Wait ${Math.ceil(wait / 1000)} s. Meanwhile, double-check the passphrase with him.`); await sleep(1000); continue; }
+    const her = new C.Initiator(pass);
+    liveEar = new LiveEar(null);
+    sight.show(P.look(her), V.MAGIC.LOOK, 'eyes', (k, n) => sightCap(`Her eyes · ${k + 1}/${n}`));
+    caption('She waits to be seen.'); air('watching for him…'); todo(HOLD + ' Her eyes are showing him her half of the key.');
+    const dn = await sight.watch('wing', V.MAGIC.DANCE, (m) => { const pr = V.unpair(m.bytes), t = pr && P.parseTap(pr[0], her.sid); return t ? { t, off: pr[1] } : null; }, 3600000, r,
+      { onProgress: (f) => { if (f > 0) { stage('tap'); caption('He dances for her.'); air(`watching him dance ${Math.round(100 * f)}%`); } } });
+    if (!alive(r) || !dn) return;
+    let keys; try { keys = her.finish(dn.t.Yb); } catch (e) { caption('That was not a fly.'); continue; }
+    scene.sees = 1; scene.tastes = 1;
+    // his offer only opens if he is her kind; she starts answering it while she listens (it is only sent if she accepts)
+    const offer = dn.off.length ? P.unsealFixed(P.T.OFFER, dn.off, her.sid, keys) : null;
+    const answerP = offer && window.RTCPeerConnection ? Link.answer(offer).catch(() => null) : Promise.resolve(null);
+    sight.show(P.seen(her.sid), V.MAGIC.SEEN, 'eyes'); sightCap('She lets him near…');
+    const expected = Song.symbolsOf(keys.tagM);
+    let result = 'nothing';
+    for (let tries = 0; tries < 3 && result === 'nothing' && alive(r); tries++) {
+      const brain = new FemaleBrain(meta, bin, M, personality(S, keys.seed, meta.n));
+      const L = new Song.Listener(brain, expected, M), queue = []; L.onFrame = (st, b) => queue.push({ st, r: snapR(b) });
+      stage('sing'); caption('She listens for his song.'); air('listening for song…'); resetNotes(); todo('He sings: keep still and quiet. ' + HOLD);
+      trace('listen'); liveEar = null; result = await hearSong(L, queue, expected, r); liveEar = new LiveEar(keys.seed); trace('heard ' + result + ' frames ' + queue.length);
+    }
+    if (!alive(r)) return;
+    const accepted = result === 'accept';
+    stage('decide', !accepted); caption(accepted ? 'His song is the one she was made to want. She slows down and opens.' : result === 'nothing' ? 'She heard no song.' : 'Wrong notes. She kicks and runs.');
+    if (!accepted) {
+      scene.kick = performance.now(); if (result !== 'nothing') memory.rejected(); answerP.then(l => { try { l && l.pc.close(); } catch (e) {} });
+      sight.show(V.pair(P.kick(her.sid)), V.MAGIC.ANSWER, 'eyes'); sightCap('She kicks.');
+      todo(result === 'nothing' ? 'No song reached her: volume up, quieter room, and try again.' : 'His song was wrong: usually a different passphrase. Check you both typed the same; she waits a little longer after each rejection.', true);
+      air('she kicks…'); await sleep(6000); continue;
+    }
+    const link = await answerP; trace('answer ready ' + !!link);
+    sight.show(V.pair(P.accept(her.sid, keys), link ? P.sealFixed(P.T.ANSWER, her.sid, keys, link.blob) : undefined), V.MAGIC.ANSWER, 'eyes', (k, n) => sightCap(`She opens · ${k + 1}/${n}`));
+    stage('mate'); caption('They mate.'); air('connecting…'); todo('You accepted him. Keep holding a moment while the private chat opens.'); scene.mating = 0.5;
+    memory.mated(her.sid);
+    const dc = link ? await Promise.race([link.dc, sleep(30000).then(() => null)]) : null;
+    if (!alive(r)) return;
+    if (dc && await Link.open(dc)) { sight.stop(); scene.mating = 1; openNest(dc, ''); caption('Mated. The nest is open.'); air('mated'); todo('You\'re in. Chat and drop photos or files below; you can pick the phones up now. Leaving the page ends it.', true); return; }
+    // no direct link: keep her answer up a little longer, then listen for a note by sound
+    await sleep(4000); sight.stop();
+    resetNest(); $('nest').hidden = false; sys('No direct link opened between the phones. Listening for a note by sound…'); nestStatus('by sound only', false);
+    todo('No direct link opened. Put the phones down close together; he may sing a note.', true);
+    const g = await waitFrame((b) => P.parseGift(b, her.sid, keys), 30000);
+    if (g) addItem({ dir: 'in', kind: 'note', text: g.text });
+    caption('Mated.'); air('mated'); return;
+  }
+}
+
 // ---------------------------------------------------------------- the nest: a temporary chat, with photo and file drops
 // Nothing is stored: the thread lives only in this page. When either phone leaves, the session is over.
 let nest = null; const rows = new Map();
@@ -323,7 +515,7 @@ function hearSong(L, queue, expected, r) {
     const tick = () => {
       if (!alive(r)) { listeners.delete(l); clearTimeout(giveUp); return; }
       if (finished && !start) start = performance.now();
-      if (start) { const want = Math.floor((performance.now() - start) / 5); while (k < queue.length && k <= want) { const q = queue[k++]; showFemale(q.st, q.r, false); } }
+      if (start) { const want = Math.min(queue.length - 1, Math.floor((performance.now() - start) / 5)); while (k <= want) { const q = queue[k]; showFemale(q.st, q.r, false, k < want); k++; } }   // draw only the latest; tick the notes for the rest
       if (finished && k >= queue.length) { listeners.delete(l); clearTimeout(giveUp); return res(heard.length ? (L.verdict || 'reject') : 'nothing'); }
       requestAnimationFrame(tick);
     };
@@ -445,16 +637,32 @@ function ring() { if (!strings) return; strings.classList.remove('ring'); void s
 
 // ---------------------------------------------------------------- the two flies
 const scene = { stage: 'orient', bad: false, t0: 0, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, pulseFlash: 0, finished: 0 };
-function resetScene() { Object.assign(scene, { stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, finished: 0 }); resetNotes(); }
+function resetScene() { Object.assign(scene, { pose: null, stage: 'orient', bad: false, sees: 0, tastes: 0, wing: 0, songT: -1, kick: 0, mating: 0, finished: 0 }); resetNotes(); }
 function drawFlies() {
   const c = $('flies'), now = performance.now(), st = scene.stage;
   const st2 = st === 'mate' && scene.mating >= 1 && scene.finished ? 'mate' : st;
   maleStage(c.getContext('2d'), c.width, c.height, { stage: st2, bad: scene.bad, t: (now - scene.t0) / 1000, now, wing: scene.wing,
     singing: scene.songT >= 0 && role === 'male', kickT: scene.kick ? (now - scene.kick) / 1000 : -1, mating: scene.mating,
-    finished: !!scene.finished, finishedT: scene.finished ? (now - scene.finished) / 1000 : 0 });
+    finished: !!scene.finished, finishedT: scene.finished ? (now - scene.finished) / 1000 : 0, pose: scene.pose });
 }
 function loop() { if (!$('ritual').hidden) { if (role === 'male') { drawFlies(); drawOsc(); idleMale(); } else if (liveEar) liveEar.draw(); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 // for tools/nest-shot (headless checks of the chat window): ?test exposes the nest
-if (new URLSearchParams(location.search).has('test')) window.__opul = { openNest, Link, sendItem };
+if (new URLSearchParams(location.search).has('test')) {
+  // headless checks: tools/sight-test.py joins two pages: each page's cards feed the other's camera, its song the other's ears
+  const cam = document.createElement('canvas'); cam.width = 640; cam.height = 480; let seen = null;
+  const b64f = (x) => { const u = new Uint8Array(x.buffer, x.byteOffset, x.byteLength); let s = ''; for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(s); };
+  window.__opul = { openNest, Link, sendItem, played: [],
+    // this page's cards as the other phone's camera would see them: head to tail (turned 180°), off-centre, smaller
+    card: () => { if ($('sight').hidden) return null; const c = document.createElement('canvas'); c.width = c.height = 300; const g = c.getContext('2d');
+      g.translate(150, 150); g.rotate(Math.PI + 0.06); g.drawImage($('card'), -150, -150, 300, 300); return c.toDataURL('image/png'); },
+    see: (url) => { const im = new Image(); im.onload = () => { seen = im; }; im.src = url; },
+    camFeed: () => { if (!seen) return null; const g = cam.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#3a3036'; g.fillRect(0, 0, 640, 480);
+      g.filter = 'blur(1px)'; g.drawImage(seen, 190, 70, 330, 330); g.filter = 'none'; return { rgba: g.getImageData(0, 0, 640, 480).data, w: 640, h: 480 }; },
+    takePlayed: () => { const out = window.__opul.played.map(b64f); window.__opul.played = []; return out; },
+    hear: (b64) => { const u = Uint8Array.from(atob(b64), c => c.charCodeAt(0)), x48 = new Float32Array(u.buffer), r = ctx.sampleRate / FS;
+      const x = r === 1 ? x48 : Float32Array.from({ length: Math.floor(x48.length * r) }, (_, i) => { const t = i / r, k = Math.floor(t), f = t - k; return (x48[k] || 0) * (1 - f) + (x48[k + 1] || 0) * f; });
+      for (let i = 0; i < x.length; i += 2048) { const b = x.subarray(i, i + 2048); for (const l of listeners) l(b); } },
+    state: () => ({ stage: scene.stage, todo: $('todoT').textContent, caption: $('caption').textContent, air: $('air').textContent, cap: $('sightCap').textContent, nest: !$('nest').hidden && $('nestStatus').textContent }) };
+}

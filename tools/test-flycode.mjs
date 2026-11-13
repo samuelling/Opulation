@@ -17,4 +17,22 @@ export async function run(ok, S) {
     const t0 = Date.now(), r = F.read(img, w, h);
     ok(r && r.payload && S.memcmp(r.payload, m), `read her face: ${name} (${Date.now() - t0} ms)`);
   }
+  // screen to screen, front cameras: the view may be turned any way and mirrored, and the card may be his wing
+  const D = F.layout('wing'); console.log(`     his wing: ${D.cells.length} hair cells, ${D.bits} carry data; her coarse eyes: ${F.layout('eyes').cells.length} facets, ${F.layout('eyes').bits} carry data`);
+  const base = [[130, 70], [530, 90], [520, 450], [120, 430]];
+  const turn = (q, k) => q.map((_, i) => q[(i + k) % 4]), mirror = q => [q[1], q[0], q[3], q[2]];
+  const views = [['upright', base], ['turned 90°', turn(base, 1)], ['upside down', turn(base, 2)], ['turned 270°', turn(base, 3)],
+                 ['mirrored (selfie view)', mirror(base)], ['mirrored and upside down', turn(mirror(base), 2)]];
+  for (const kind of ['face', 'eyes', 'wing']) for (const [name, quad] of views) {
+    const m = S.randombytes_buf(41), bits = F.facetBits(m.subarray(0, F.layout(kind).payload), kind), w = 640, h = 480;
+    const Hm = F.homography([[0, 0], [1000, 0], [1000, 1000], [0, 1000]], quad);
+    const img = F.drawRaster(bits, w, h, Hm, kind);
+    for (let i = 0; i < img.length; i++) img[i] = img[i] + 8 * (Math.random() * 2 - 1);
+    const r = F.read(img, w, h, kind);
+    ok(r && r.payload && S.memcmp(r.payload, m.subarray(0, F.layout(kind).payload)), `read ${({ face: 'her face', eyes: 'her eyes (coarse)', wing: 'his wing' })[kind]}: ${name}`);
+  }
+  { // a face is not read as a wing, nor the other way round
+    const m = S.randombytes_buf(41), Hm = F.homography([[0, 0], [1000, 0], [1000, 1000], [0, 1000]], base);
+    const r = F.read(F.drawRaster(F.facetBits(m, 'face'), 640, 480, Hm, 'face'), 640, 480, 'wing');
+    ok(!(r && r.payload), 'her face does not read as his wing'); }
 }

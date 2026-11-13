@@ -51,13 +51,14 @@
   <form method="dialog"><button class="x" aria-label="Close">×</button></form>
   <h2 id="howT">How to mate</h2>
   <ol>
-        <li><b>Two phones, one room.</b> Both open this page. Turn the volume up and the room down: no music, no talking during the songs.</li>
+        <li><b>Two phones, one room.</b> Both open this page. Volume up, room quiet: the courtship song is sung out loud.</li>
         <li><b>Agree on a passphrase out loud</b> (any short phrase, e.g. <i>fig wasp</i>). Both phones must type exactly the same thing. It's your species: a phone with a different one gets kicked.</li>
-        <li><b>Pick parts.</b> The one sending is <b>♂ Court</b>; the one receiving is <b>♀ Be courted</b>.</li>
-        <li><b>♀ goes first:</b> tap <i>Wait to be courted</i> and allow the microphone. Her face appears; turn the screen brightness up.</li>
-        <li><b>♂ next:</b> tap <i>Begin courtship</i>, allow the camera and microphone, and point the camera at her face until it locks (a second or two).</li>
-        <li><b>Then set both phones down</b> face up, a foot apart, speakers toward each other, and stay quiet. Everything from here is sung as fly song: his tap, his courtship song, her answer, and the way to your private chat. Allow about a minute.</li>
+        <li><b>Pick parts.</b> The one sending is <b>♂ Court</b>; the one receiving is <b>♀ Be courted</b>. Leave <b>Sight &amp; song</b> on, on both.</li>
+        <li><b>♀ goes first:</b> tap <i>Wait to be courted</i>, allow the camera and microphone, and turn the brightness up. Her face appears at the bottom of the screen.</li>
+        <li><b>♂ next:</b> tap <i>Begin courtship</i> and allow the camera and microphone.</li>
+        <li><b>Hold the phones screen to screen, head to tail</b> (one upside down, so each front camera sits over the other's fly), about a hand apart, and keep still. His camera reads her eyes; then he dances, and her camera reads his wing; then he sings his key song out loud and she decides, and answers with her eyes. About ten seconds.</li>
         <li><b>If she accepts,</b> a private chat opens on both phones: notes, photos, files. When either of you leaves the page, you're finished and nothing is kept.</li>
+        <li><b>Won't lock?</b> More light on the screens, a little farther apart, or choose <b>Song only</b> on both: then he points his back camera at her face once, the phones go face up a foot apart, and everything else is sung (about a minute).</li>
       </ol>
   <form method="dialog"><button class="go">Got it</button></form>
 </dialog>
@@ -72,6 +73,10 @@
         <span class="sym">♀</span><span class="rt">Be courted</span><span class="rs">I'm receiving</span>
       </button>
     </div>
+    <div class="modes" role="radiogroup" aria-label="How you court">
+      <button id="modeSight" class="mode" role="radio" aria-checked="true"><b>Sight &amp; song</b><span>screen to screen · about 10 s</span></button>
+      <button id="modeSong" class="mode" role="radio" aria-checked="false"><b>Song only</b><span>phones on a table · about a minute</span></button>
+    </div>
     <label class="field">Shared passphrase<span class="hint">Agree on it together first; both phones type exactly the same. Short is fine.</span>
       <input id="pass" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. bromeliad at dusk">
     </label>
@@ -83,6 +88,12 @@
     
   </section>
 
+  <div id="sight" class="sight" hidden>
+    <canvas id="card" width="1000" height="1000" aria-label="Your fly, as a code the other phone reads"></canvas>
+    <p id="sightCap" class="sightcap"></p>
+    <button id="sightX" class="sightx" aria-label="Stop">×</button>
+    <video id="fcam" playsinline muted autoplay></video>
+  </div>
   <section id="ritual" hidden>
     <div id="todo" class="todo" role="status" aria-live="polite"><span class="todoK">Now</span><span id="todoT"></span></div>
     <ol id="stages" class="stages" aria-label="The ritual">

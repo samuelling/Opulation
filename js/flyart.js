@@ -109,6 +109,7 @@ function bed(g, W, H, now) {
  * The male's stage. st: {stage, bad, t (s since the stage began), now (ms), wing (0..1 song drive), singing,
  * kickT (s since she kicked, or -1), mating (0..1), finished}
  */
+const D = { wing: 0, side: 1, tap: 0, lick: 0, curl: 0, circ: 0 };
 export function maleStage(g, W, H, st) {
   g.clearRect(0, 0, W, H); bed(g, W, H, st.now);
   const S = Math.min(W, H) / 120;                     // fly scale: a fly ~ 1/2 the stage width
@@ -116,7 +117,22 @@ export function maleStage(g, W, H, st) {
   const herTip = fx - 50 * S * 1.05, reach = (d) => herTip - d * S;   // where he stands, d fly-units behind her tip
   let mx = W * 0.4, my = H * 0.52, ma = 0, walk = null, tapReach = 0, wingR = 0, vib = 0, proboscis = 0, curl = 0, ovi = 0, kick = 0, fxo = 0, antenna = Math.sin(st.now / 300) * 0.5;
   const t = st.t;
-  switch (st.stage) {
+  // by sight: his dance, a pose per card (js/visual.js POSES), eased from one pose to the next
+  const stage = st.pose && !st.bad && (st.stage === 'tap' || st.stage === 'decide') ? 'dance' : st.stage;
+  if (stage === 'dance') {
+    const p = st.pose, k = 0.12; D.wing += (p.wing - D.wing) * k; D.side += (p.side - D.side) * k; D.tap += (p.tap - D.tap) * k; D.lick += (p.lick - D.lick) * k; D.curl += (p.curl - D.curl) * k;
+    D.circ += ((p.name.startsWith('circles') ? 1 : 0) - D.circ) * 0.06;
+    const swing = Math.sin(D.circ * Math.PI) * 0.16;             // circling: out to her side and back
+    mx = reach(38 - 10 * D.lick); my = H * (0.52 + swing * Math.sign(D.side || 1)); ma = -swing * 2.2 * Math.sign(D.side || 1);
+    walk = D.circ > 0.05 && D.circ < 0.95 ? st.now / 70 : null;
+    const both = 1 - Math.min(1, Math.abs(D.side));                // scissoring: both wings
+    wingR = D.wing * Math.max(both, Math.max(0, D.side)); const wingL = D.wing * Math.max(both, Math.max(0, -D.side));
+    vib = st.pose.name.includes('pulse') ? Math.sin(st.now / 4) * 0.12 : 0; tapReach = D.tap * (0.5 + 0.5 * Math.sin(t * 10)); proboscis = D.lick; curl = D.curl;
+    fly(g, fx, fy, 0, S * 1.05, { female: true });
+    fly(g, mx, my, ma, S, { wingR, wingL, vib, walk, tapReach, proboscis, curl, antenna });
+    return;
+  }
+  switch (stage) {
     case 'orient': { const k = ease(t / 2.4); mx = lerp(-30 * S, reach(40), k); my = lerp(H * 0.72, H * 0.52, k); ma = lerp(-0.5, 0, ease(t / 2.0)); walk = k < 1 ? st.now / 70 : null; break; }
     case 'tap': { mx = lerp(reach(40), reach(36), ease(t / 0.6)); tapReach = 0.5 + 0.5 * Math.sin(t * 10); break; }
     case 'sing': { mx = reach(38); wingR = st.singing ? 1 : 0.85; vib = st.singing ? (Math.sin(st.now / 4) * 0.08 + 0.12 * st.wing) : 0; break; }

@@ -193,3 +193,19 @@ body.female #brainFemale { padding-top: 14px; }
 
 .fcaption { margin: 0 0 10px; font: italic 19px var(--serif); color: var(--ink); min-height: 1.4em; }
 body.male .fcaption { display: none; }
+
+/* how they court */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 16px; }
+.mode { text-align: left; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line2); background: rgba(0,0,0,.18); color: var(--muted); font: inherit; cursor: pointer; }
+.mode b { display: block; color: var(--ink, #f3e3d3); font-weight: 600; }
+.mode span { font-size: 13px; }
+.mode[aria-checked="true"] { border-color: #FF68BA; box-shadow: 0 0 0 1px #FF68BA inset, 0 0 24px rgba(255,104,186,.18); color: #f3e3d3; }
+/* screen to screen: the cards fill the bottom of the screen, where the other phone's front camera sits */
+.sight { position: fixed; left: 0; right: 0; bottom: 0; height: min(100vw, 62vh); z-index: 40; background: #ece4d6; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 -20px 60px rgba(0,0,0,.6); border-top: 2px solid #2a0b1d; }
+.sight[hidden] { display: none; }
+.sight canvas { height: 100%; width: auto; max-width: 100%; aspect-ratio: 1; display: block; }
+.sight video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sightcap { position: absolute; top: 4px; left: 0; right: 0; margin: 0; text-align: center; font: italic 14px var(--serif); color: #5a1a1c; pointer-events: none; }
+.sightx { position: absolute; top: 4px; right: 8px; border: 0; background: none; color: #5a1a1c; font-size: 26px; line-height: 1; cursor: pointer; }
+body.sighted main { padding-bottom: min(100vw, 62vh); }

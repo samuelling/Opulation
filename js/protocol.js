@@ -10,12 +10,18 @@
 //   ANSWER  her → him     (song)    8 | sid4 | sealed WebRTC answer              (js/link.js), for files and photos
 //   GIFT    he → her      (song)     5 | sid4 | nonce(24) | sealed note            a note by sound, if no link opens
 //
+// Sight and song (screen to screen, front cameras; js/visual.js): the same turns, but everything except the key
+// song goes by sight, as loops of cards, which is many times faster than sound:
+//   her eyes:  LOOK                          his wing (the dance):  TAP + sealed OFFER
+//   her eyes:  SEEN (she has his dance; he may sing)          then he sings the key song, by sound, as before
+//   her eyes:  ACCEPT + sealed ANSWER, or KICK
+//
 // Every sound turn is sung as fly song (js/flysong.js). The gift and the link messages are sealed with
 // XChaCha20-Poly1305 under kx, with their 5-byte header as associated data.
 import * as C from './cpace.js';
 
 export const VERSION = 5, LOOK_VERSION = 1;
-export const T = { TAP: 1, ACCEPT: 4, KICK: 6, GIFT: 5, OFFER: 7, ANSWER: 8 };
+export const T = { TAP: 1, ACCEPT: 4, KICK: 6, GIFT: 5, OFFER: 7, ANSWER: 8, SEEN: 9 };
 const te = new TextEncoder(), td = new TextDecoder();
 const head = (t, sid) => Uint8Array.of(t, sid[0], sid[1], sid[2], sid[3]);
 const sid4eq = (a, b) => a[1] === b[0] && a[2] === b[1] && a[3] === b[2] && a[4] === b[3];
@@ -27,6 +33,9 @@ export function tap(sid, Yb) { return C.cat(head(T.TAP, sid), Yb); }
 export function parseTap(b, sid) { if (b.length !== 37 || b[0] !== T.TAP || !sid4eq(b, sid)) return null; return { Yb: b.slice(5, 37) }; }
 export function accept(sid, keys) { return C.cat(head(T.ACCEPT, sid), keys.tagF); }
 export function kick(sid) { return head(T.KICK, sid); }
+/** by sight only: she has read his dance (no secret in it: it only tells him to sing now) */
+export function seen(sid) { return head(T.SEEN, sid); }
+export function parseSeen(b, sid) { return !!b && b.length === 5 && b[0] === T.SEEN && sid4eq(b, sid); }
 /** his reading of her verdict: 'accept' only with the right tagF; 'wrongkind' if she accepted with a different one */
 export function parseVerdict(b, sid, keys) {
   if (b.length >= 5 && b[0] === T.KICK && sid4eq(b, sid)) return 'kick';

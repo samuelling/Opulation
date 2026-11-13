@@ -67,6 +67,6 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
 
 export { ok, S, C };
 if (process.argv[2] !== '--lib') {
-  for (const f of ['./test-flycode.mjs', './test-female.mjs', './test-e2e.mjs']) { const extra = await import(f); await extra.run(ok, S); }
+  for (const f of ['./test-flycode.mjs', './test-visual.mjs', './test-female.mjs', './test-e2e.mjs']) { const extra = await import(f); await extra.run(ok, S); }
   console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);
 }
